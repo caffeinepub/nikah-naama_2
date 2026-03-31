@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.625rem;
+
+    /* Islamic Color Palette */
+    --background: 0.96 0.018 95;
+    --foreground: 0.18 0.04 155;
+    --card: 0.98 0.012 90;
+    --card-foreground: 0.18 0.04 155;
+    --popover: 0.98 0.012 90;
+    --popover-foreground: 0.18 0.04 155;
+    --primary: 0.35 0.1 155;
+    --primary-foreground: 0.98 0.01 90;
+    --secondary: 0.47 0.12 155;
+    --secondary-foreground: 0.98 0.01 90;
+    --muted: 0.93 0.015 95;
+    --muted-foreground: 0.5 0.04 155;
+    --accent: 0.75 0.15 85;
+    --accent-foreground: 0.18 0.04 155;
+    --destructive: 0.577 0.245 27.325;
+    --destructive-foreground: 0.985 0 0;
+    --border: 0.88 0.03 95;
+    --input: 0.9 0.02 95;
+    --ring: 0.47 0.12 155;
+    --chart-1: 0.646 0.222 41.116;
+    --chart-2: 0.6 0.118 184.704;
+    --chart-3: 0.398 0.07 227.392;
+    --chart-4: 0.828 0.189 84.429;
+    --chart-5: 0.769 0.188 70.08;
+    --sidebar: 0.35 0.1 155;
+    --sidebar-foreground: 0.98 0.01 90;
+    --sidebar-primary: 0.75 0.15 85;
+    --sidebar-primary-foreground: 0.18 0.04 155;
+    --sidebar-accent: 0.28 0.08 155;
+    --sidebar-accent-foreground: 0.98 0.01 90;
+    --sidebar-border: 0.28 0.08 155;
+    --sidebar-ring: 0.75 0.15 85;
+
+    /* Custom brand tokens */
+    --green-dark: #0b5a3a;
+    --green-mid: #1e7a52;
+    --gold: #d4af37;
+    --parchment: #f4f1da;
+    --card-bg: #faf7e6;
+  }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Inter", sans-serif;
+    background-color: #f4f1da;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: "Playfair Display", serif;
+  }
+}
