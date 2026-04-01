@@ -142,6 +142,8 @@ export interface backendInterface {
   getZakatProfilesByMasjid(masjidId: bigint): Promise<Array<ZakatProfile>>;
   getZakatSettings(): Promise<ZakatSettings | null>;
   isCallerAdmin(): Promise<boolean>;
+  isAdminAssigned(): Promise<boolean>;
+  claimAdminIfUnassigned(): Promise<boolean>;
   markZakatProfileFulfilled(id: bigint): Promise<void>;
   postJobPosting(job: JobPosting): Promise<bigint>;
   postMatrimonyProposal(proposal: MatrimonyProposal): Promise<bigint>;

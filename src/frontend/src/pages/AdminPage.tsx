@@ -654,9 +654,122 @@ function AdminManagementTab() {
   );
 }
 
+function AccessDeniedScreen({
+  actor,
+  isAuthenticated,
+  qc,
+}: {
+  actor: any;
+  isAuthenticated: boolean;
+  qc: ReturnType<typeof useQueryClient>;
+}) {
+  const { data: adminAssigned, isLoading: checkingAdmin } = useQuery({
+    queryKey: ["isAdminAssigned"],
+    queryFn: () => actor.isAdminAssigned() as Promise<boolean>,
+    enabled: !!actor && isAuthenticated,
+  });
+
+  const claimAdminMutation = useMutation({
+    mutationFn: () => {
+      if (!actor) throw new Error("Not connected to backend");
+      return actor.claimAdminIfUnassigned() as Promise<boolean>;
+    },
+    onSuccess: (result: boolean) => {
+      if (result) {
+        toast.success("You are now the admin! Reloading...");
+        qc.invalidateQueries({ queryKey: ["isAdmin"] });
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        toast.error("Could not claim admin. An admin may already be assigned.");
+      }
+    },
+    onError: () => toast.error("Failed to claim admin role."),
+  });
+
+  if (checkingAdmin) {
+    return (
+      <div
+        className="max-w-xl mx-auto px-4 py-12 text-center"
+        data-ocid="admin.loading_state"
+        style={{ color: "#1E7A52" }}
+      >
+        Checking system status...
+      </div>
+    );
+  }
+
+  if (!adminAssigned) {
+    return (
+      <div
+        className="max-w-xl mx-auto px-4 py-12 text-center space-y-4"
+        data-ocid="admin.claim_admin.panel"
+      >
+        <div
+          className="rounded-xl p-8"
+          style={{
+            backgroundColor: "#FAF7E6",
+            border: "1px solid rgba(212,175,55,0.4)",
+          }}
+        >
+          <p className="text-3xl mb-4">🕌</p>
+          <h2
+            className="text-xl font-bold mb-2"
+            style={{
+              color: "#0B5A3A",
+              fontFamily: "'Playfair Display', serif",
+            }}
+          >
+            Claim Admin Role
+          </h2>
+          <p className="text-sm mb-6" style={{ color: "#1E7A52" }}>
+            No admin has been assigned yet. Click below to claim the admin role
+            for your account.
+          </p>
+          <Button
+            onClick={() => claimAdminMutation.mutate()}
+            disabled={claimAdminMutation.isPending}
+            data-ocid="admin.claim_admin.primary_button"
+            style={{
+              backgroundColor: "#0B5A3A",
+              color: "white",
+              padding: "0.75rem 2rem",
+            }}
+          >
+            {claimAdminMutation.isPending ? "Claiming..." : "Claim Admin Role"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="max-w-xl mx-auto px-4 py-12 text-center"
+      data-ocid="admin.error_state"
+    >
+      <div
+        className="rounded-xl p-8"
+        style={{
+          backgroundColor: "#FAF7E6",
+          border: "1px solid rgba(212,175,55,0.4)",
+        }}
+      >
+        <p className="text-3xl mb-3">🔒</p>
+        <p className="text-lg font-semibold" style={{ color: "#c62828" }}>
+          Access Denied
+        </p>
+        <p className="text-sm mt-2" style={{ color: "#1E7A52" }}>
+          An admin is already assigned. Contact the current admin to be granted
+          access.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { identity } = useInternetIdentity();
-  const { actor } = useActor();
+  const { actor, isFetching: actorFetching } = useActor();
   const isAuthenticated = !!identity && !identity.getPrincipal().isAnonymous();
   const qc = useQueryClient();
   const [zakatForm, setZakatForm] = useState<ZakatSettings>({
@@ -782,6 +895,18 @@ export default function AdminPage() {
     );
   }
 
+  if (!actor || actorFetching) {
+    return (
+      <div
+        className="text-center py-12"
+        data-ocid="admin.loading_state"
+        style={{ color: "#1E7A52" }}
+      >
+        Connecting...
+      </div>
+    );
+  }
+
   if (adminLoading) {
     return (
       <div
@@ -796,17 +921,11 @@ export default function AdminPage() {
 
   if (!isAdmin) {
     return (
-      <div
-        className="max-w-xl mx-auto px-4 py-12 text-center"
-        data-ocid="admin.error_state"
-      >
-        <p className="text-lg font-semibold" style={{ color: "#c62828" }}>
-          Access Denied
-        </p>
-        <p className="text-sm mt-2" style={{ color: "#1E7A52" }}>
-          You do not have admin privileges.
-        </p>
-      </div>
+      <AccessDeniedScreen
+        actor={actor}
+        isAuthenticated={isAuthenticated}
+        qc={qc}
+      />
     );
   }
 

@@ -121,11 +121,29 @@ actor {
   stable var nextZakatProfileId = 1;
   stable var masjidMigrated = false;
 
+  // --- Stable Authorization State ---
+  // These survive canister upgrades so admin roles are not wiped on each deployment.
+  stable var stableAdminAssigned : Bool = false;
+  stable var stableUserRoles : [(Principal, AccessControl.UserRole)] = [];
+
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
-  // One-time migration from old map (no upiId) to new map (with upiId)
+  // Save auth state before upgrade
+  system func preupgrade() {
+    stableAdminAssigned := accessControlState.adminAssigned;
+    stableUserRoles := accessControlState.userRoles.entries().toArray();
+  };
+
+  // Restore auth state and run migrations after upgrade
   system func postupgrade() {
+    // Restore authorization state so admins survive deployments
+    accessControlState.adminAssigned := stableAdminAssigned;
+    for ((p, r) in stableUserRoles.vals()) {
+      accessControlState.userRoles.add(p, r);
+    };
+
+    // One-time migration from old masjid map (no upiId) to new map (with upiId)
     if (not masjidMigrated) {
       for ((id, old) in masjidProfiles.entries()) {
         masjidProfilesV2.add(id, {
@@ -149,15 +167,40 @@ actor {
   };
 
   // --- Reset All Roles (protected by hardcoded reset secret) ---
-  // After reset, the next person who logs in with the admin token becomes the new admin.
   public shared func resetAllRolesWithToken(token : Text) : async () {
     if (token != "NIKAHNAAMA_RESET_2026") {
       Runtime.trap("Invalid reset token");
     };
     for (p in accessControlState.userRoles.keys().toArray().vals()) {
-      ignore accessControlState.userRoles.remove(p);
+      accessControlState.userRoles.remove(p);
     };
     accessControlState.adminAssigned := false;
+    // Also clear stable copies so the reset persists through any future upgrade
+    stableAdminAssigned := false;
+    stableUserRoles := [];
+  };
+
+  // Claim admin role when no admin is assigned yet (e.g. after a reset).
+  // Works correctly whether or not _initializeAccessControlWithSecret has been called first.
+  // Explicitly removes any prior role before setting admin to guarantee the overwrite.
+  public shared ({ caller }) func claimAdminIfUnassigned() : async Bool {
+    if (caller.isAnonymous()) { return false };
+    if (not accessControlState.adminAssigned) {
+      // Remove any existing entry (e.g. #user set by _initializeAccessControlWithSecret)
+      // so the add below always takes effect regardless of Map.add overwrite semantics.
+      ignore accessControlState.userRoles.remove(caller);
+      accessControlState.userRoles.add(caller, #admin);
+      accessControlState.adminAssigned := true;
+      stableAdminAssigned := true;
+      stableUserRoles := accessControlState.userRoles.entries().toArray();
+      return true;
+    };
+    return false;
+  };
+
+  // Returns whether an admin has been assigned to the system.
+  public query func isAdminAssigned() : async Bool {
+    accessControlState.adminAssigned;
   };
 
   // --- Nikah Registration ---
@@ -411,7 +454,7 @@ actor {
         if (not (existing.createdBy == caller or AccessControl.isAdmin(accessControlState, caller))) {
           Runtime.trap("Unauthorized");
         };
-        ignore zakatProfiles.remove(id);
+        zakatProfiles.remove(id);
       };
     };
   };
