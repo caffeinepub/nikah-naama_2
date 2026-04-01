@@ -8,8 +8,8 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActor } from "@/hooks/useActor";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
-import type { Principal } from "@icp-sdk/core/principal";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -447,6 +447,8 @@ function AdminManagementTab() {
   const { actor } = useActor();
   const [principalInput, setPrincipalInput] = useState("");
   const [selectedRole, setSelectedRole] = useState<"admin" | "user">("admin");
+  const [resetToken, setResetToken] = useState("");
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const assignRole = useMutation({
     mutationFn: async () => {
@@ -462,8 +464,22 @@ function AdminManagementTab() {
     onError: (e: any) => toast.error(e?.message || "Failed to assign role"),
   });
 
+  const resetAllRoles = useMutation({
+    mutationFn: async () => {
+      return (actor as any).resetAllRolesWithToken(resetToken.trim());
+    },
+    onSuccess: () => {
+      toast.success("All roles reset. The next login will claim admin.");
+      setResetToken("");
+      setConfirmReset(false);
+    },
+    onError: (e: any) =>
+      toast.error(e?.message || "Failed to reset roles. Check your token."),
+  });
+
   return (
-    <div className="max-w-md" data-ocid="admin.admin_mgmt.form">
+    <div className="max-w-md space-y-6" data-ocid="admin.admin_mgmt.form">
+      {/* Role Assignment */}
       <div
         className="rounded-xl p-6 space-y-4"
         style={{
@@ -512,8 +528,9 @@ function AdminManagementTab() {
         </Button>
       </div>
 
+      {/* How-to info */}
       <div
-        className="mt-6 rounded-xl p-5"
+        className="rounded-xl p-5"
         style={{
           backgroundColor: "#E8F5E9",
           border: "1px solid rgba(30,122,82,0.3)",
@@ -534,9 +551,109 @@ function AdminManagementTab() {
           <li>4. Paste it above and assign the Admin role.</li>
         </ol>
       </div>
+
+      {/* Danger Zone */}
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{ border: "1.5px solid #c62828" }}
+        data-ocid="admin.danger_zone.panel"
+      >
+        {/* Header */}
+        <div
+          className="flex items-center gap-2 px-5 py-3"
+          style={{ backgroundColor: "#c62828" }}
+        >
+          <AlertTriangle className="h-4 w-4 text-white flex-shrink-0" />
+          <h3 className="font-bold text-white text-sm tracking-wide">
+            DANGER ZONE — Reset All Roles
+          </h3>
+        </div>
+
+        {/* Body */}
+        <div className="p-5 space-y-4" style={{ backgroundColor: "#fff5f5" }}>
+          <p className="text-xs leading-relaxed" style={{ color: "#7f1d1d" }}>
+            ⚠️ This will{" "}
+            <strong>permanently remove ALL admin and user roles</strong> from
+            the system. The very next person who logs in will automatically
+            become the new Admin. This action cannot be undone.
+          </p>
+
+          <div className="space-y-1">
+            <Label style={{ color: "#7f1d1d" }}>Reset Token</Label>
+            <Input
+              type="password"
+              placeholder="Enter reset token"
+              value={resetToken}
+              onChange={(e) => {
+                setResetToken(e.target.value);
+                setConfirmReset(false);
+              }}
+              style={{
+                borderColor: "#fca5a5",
+                backgroundColor: "white",
+              }}
+              data-ocid="admin.danger_zone.input"
+            />
+          </div>
+
+          {!confirmReset ? (
+            <Button
+              variant="outline"
+              disabled={!resetToken.trim()}
+              onClick={() => setConfirmReset(true)}
+              className="w-full font-semibold"
+              style={{
+                borderColor: "#c62828",
+                color: "#c62828",
+                backgroundColor: "transparent",
+              }}
+              data-ocid="admin.danger_zone.button"
+            >
+              Reset All Roles
+            </Button>
+          ) : (
+            <div
+              className="rounded-lg p-4 space-y-3"
+              style={{
+                backgroundColor: "#fee2e2",
+                border: "1px solid #fca5a5",
+              }}
+              data-ocid="admin.danger_zone.dialog"
+            >
+              <p className="text-xs font-semibold" style={{ color: "#7f1d1d" }}>
+                Are you absolutely sure? This will log out all admins
+                immediately.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  disabled={resetAllRoles.isPending}
+                  onClick={() => resetAllRoles.mutate()}
+                  className="font-semibold"
+                  style={{ backgroundColor: "#c62828", color: "white" }}
+                  data-ocid="admin.danger_zone.confirm_button"
+                >
+                  {resetAllRoles.isPending
+                    ? "Resetting..."
+                    : "Yes, Reset All Roles"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setConfirmReset(false)}
+                  data-ocid="admin.danger_zone.cancel_button"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
+
 export default function AdminPage() {
   const { identity } = useInternetIdentity();
   const { actor } = useActor();

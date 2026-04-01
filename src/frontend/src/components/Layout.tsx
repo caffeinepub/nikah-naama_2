@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
-import { Link, Outlet, useNavigate } from "@tanstack/react-router";
+import { Link, Outlet } from "@tanstack/react-router";
 import { useState } from "react";
 
 function MosqueIcon() {
@@ -65,7 +65,6 @@ function PrincipalBadge({ principal }: { principal: string }) {
 export default function Layout() {
   const { identity, login, clear, isLoggingIn } = useInternetIdentity();
   const isAuthenticated = !!identity && !identity.getPrincipal().isAnonymous();
-  const navigate = useNavigate();
 
   return (
     <div
@@ -114,15 +113,15 @@ export default function Layout() {
           {isAuthenticated && (
             <div className="flex items-center gap-2">
               <PrincipalBadge principal={identity!.getPrincipal().toText()} />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate({ to: "/admin" })}
-                data-ocid="nav.admin.button"
-                style={{ borderColor: "#0B5A3A", color: "#0B5A3A" }}
-              >
-                Admin Panel
-              </Button>
+              <Link to="/admin" data-ocid="nav.admin.button">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  style={{ borderColor: "#0B5A3A", color: "#0B5A3A" }}
+                >
+                  Admin Panel
+                </Button>
+              </Link>
             </div>
           )}
           {isAuthenticated ? (

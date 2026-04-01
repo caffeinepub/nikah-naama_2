@@ -148,6 +148,18 @@ actor {
     };
   };
 
+  // --- Reset All Roles (protected by hardcoded reset secret) ---
+  // After reset, the next person who logs in with the admin token becomes the new admin.
+  public shared func resetAllRolesWithToken(token : Text) : async () {
+    if (token != "NIKAHNAAMA_RESET_2026") {
+      Runtime.trap("Invalid reset token");
+    };
+    for (p in accessControlState.userRoles.keys().toArray().vals()) {
+      ignore accessControlState.userRoles.remove(p);
+    };
+    accessControlState.adminAssigned := false;
+  };
+
   // --- Nikah Registration ---
   public shared ({ caller }) func submitNikahRegistration(reg : NikahRegistration) : async Nat {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
