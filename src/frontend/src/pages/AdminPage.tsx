@@ -1,4 +1,4 @@
-import { NikahStatus } from "@/backend";
+import { NikahStatus, UserRole } from "@/backend";
 import type { NikahRegistration, ZakatSettings } from "@/backend";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActor } from "@/hooks/useActor";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
+import type { Principal } from "@icp-sdk/core/principal";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -442,6 +443,100 @@ function ZakatProfilesAdminTab() {
   );
 }
 
+function AdminManagementTab() {
+  const { actor } = useActor();
+  const [principalInput, setPrincipalInput] = useState("");
+  const [selectedRole, setSelectedRole] = useState<"admin" | "user">("admin");
+
+  const assignRole = useMutation({
+    mutationFn: async () => {
+      const { Principal } = await import("@icp-sdk/core/principal");
+      const p = Principal.fromText(principalInput.trim());
+      const role = selectedRole === "admin" ? UserRole.admin : UserRole.user;
+      return actor!.assignCallerUserRole(p, role);
+    },
+    onSuccess: () => {
+      toast.success("Role assigned successfully!");
+      setPrincipalInput("");
+    },
+    onError: (e: any) => toast.error(e?.message || "Failed to assign role"),
+  });
+
+  return (
+    <div className="max-w-md" data-ocid="admin.admin_mgmt.form">
+      <div
+        className="rounded-xl p-6 space-y-4"
+        style={{
+          backgroundColor: "#FAF7E6",
+          border: "1px solid rgba(212,175,55,0.4)",
+        }}
+      >
+        <h3 className="font-semibold" style={{ color: "#0B5A3A" }}>
+          🔑 Assign Admin or User Role
+        </h3>
+        <p className="text-xs" style={{ color: "#555" }}>
+          Ask the person to log in, go to their profile, and share their
+          Principal ID. Paste it below to assign them a role.
+        </p>
+        <div className="space-y-1">
+          <Label style={{ color: "#0B5A3A" }}>Principal ID</Label>
+          <Input
+            placeholder="e.g. aaaaa-aa or xlmdg-vqaaa-..."
+            value={principalInput}
+            onChange={(e) => setPrincipalInput(e.target.value)}
+            data-ocid="admin.admin_mgmt.principal.input"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label style={{ color: "#0B5A3A" }}>Role to Assign</Label>
+          <select
+            value={selectedRole}
+            onChange={(e) =>
+              setSelectedRole(e.target.value as "admin" | "user")
+            }
+            className="w-full border rounded-md px-3 py-2 text-sm"
+            style={{ borderColor: "rgba(212,175,55,0.4)", color: "#0B5A3A" }}
+            data-ocid="admin.admin_mgmt.role.select"
+          >
+            <option value="admin">Admin (Super Admin)</option>
+            <option value="user">User (Regular User)</option>
+          </select>
+        </div>
+        <Button
+          onClick={() => assignRole.mutate()}
+          disabled={!principalInput.trim() || assignRole.isPending}
+          style={{ backgroundColor: "#0B5A3A", color: "white" }}
+          data-ocid="admin.admin_mgmt.assign.button"
+        >
+          {assignRole.isPending ? "Assigning..." : "Assign Role"}
+        </Button>
+      </div>
+
+      <div
+        className="mt-6 rounded-xl p-5"
+        style={{
+          backgroundColor: "#E8F5E9",
+          border: "1px solid rgba(30,122,82,0.3)",
+        }}
+      >
+        <h4 className="font-semibold mb-2 text-sm" style={{ color: "#0B5A3A" }}>
+          📋 How to find a Principal ID
+        </h4>
+        <ol className="text-xs space-y-1" style={{ color: "#333" }}>
+          <li>
+            1. Ask the person to log into the app using Internet Identity.
+          </li>
+          <li>
+            2. Once logged in, their Principal ID appears in the Profile section
+            (or you can add one).
+          </li>
+          <li>3. They copy and share their Principal ID with you.</li>
+          <li>4. Paste it above and assign the Admin role.</li>
+        </ol>
+      </div>
+    </div>
+  );
+}
 export default function AdminPage() {
   const { identity } = useInternetIdentity();
   const { actor } = useActor();
@@ -626,6 +721,9 @@ export default function AdminPage() {
           </TabsTrigger>
           <TabsTrigger value="zakat" data-ocid="admin.zakat.tab">
             Zakat Settings
+          </TabsTrigger>
+          <TabsTrigger value="admin_mgmt" data-ocid="admin.admin_mgmt.tab">
+            Admin Management
           </TabsTrigger>
         </TabsList>
 
@@ -949,6 +1047,9 @@ export default function AdminPage() {
               </Button>
             </div>
           </div>
+        </TabsContent>
+        <TabsContent value="admin_mgmt" data-ocid="admin.admin_mgmt.panel">
+          <AdminManagementTab />
         </TabsContent>
       </Tabs>
     </div>

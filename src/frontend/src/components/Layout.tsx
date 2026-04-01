@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 
 function MosqueIcon() {
   return (
@@ -34,6 +35,32 @@ const navLinks = [
   { to: "/jobs" as const, label: "Jobs" },
   { to: "/donations" as const, label: "Donations" },
 ];
+
+function PrincipalBadge({ principal }: { principal: string }) {
+  const [copied, setCopied] = useState(false);
+  const short = `${principal.slice(0, 5)}...${principal.slice(-3)}`;
+  const copy = () => {
+    navigator.clipboard.writeText(principal);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={`Your Principal ID: ${principal} (click to copy)`}
+      className="text-xs px-2 py-1 rounded-full border font-mono cursor-pointer"
+      style={{
+        borderColor: "#D4AF37",
+        color: "#0B5A3A",
+        backgroundColor: "#FAF7E6",
+      }}
+      data-ocid="nav.principal_id.button"
+    >
+      {copied ? "Copied!" : `ID: ${short}`}
+    </button>
+  );
+}
 
 export default function Layout() {
   const { identity, login, clear, isLoggingIn } = useInternetIdentity();
@@ -85,15 +112,18 @@ export default function Layout() {
 
         <div className="flex items-center gap-2">
           {isAuthenticated && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate({ to: "/admin" })}
-              data-ocid="nav.admin.button"
-              style={{ borderColor: "#0B5A3A", color: "#0B5A3A" }}
-            >
-              Admin Panel
-            </Button>
+            <div className="flex items-center gap-2">
+              <PrincipalBadge principal={identity!.getPrincipal().toText()} />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate({ to: "/admin" })}
+                data-ocid="nav.admin.button"
+                style={{ borderColor: "#0B5A3A", color: "#0B5A3A" }}
+              >
+                Admin Panel
+              </Button>
+            </div>
           )}
           {isAuthenticated ? (
             <Button
