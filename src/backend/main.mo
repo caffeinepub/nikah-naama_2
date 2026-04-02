@@ -8,6 +8,7 @@ import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
 import Text "mo:core/Text";
 import Float "mo:core/Float";
+import Int "mo:core/Int";
 
 
 
@@ -27,12 +28,57 @@ actor {
   type NikahStatus = { #pending; #approved; #rejected };
   type ZakatProfileStatus = { #open; #fulfilled };
 
-  type NikahRegistration = {
+  // OLD NikahRegistration type kept for stable upgrade compatibility
+  type OldNikahRegistration = {
     id : Nat; brideName : Text; groomName : Text;
     brideAadhaarHash : Text; groomAadhaarHash : Text;
     nikahDate : Text; masjidVenue : Text; qaziName : Text;
     witness1 : Text; witness2 : Text; city : Text;
     status : NikahStatus; registeredBy : Principal; timestamp : Int;
+  };
+
+  // NEW expanded NikahRegistration type
+  type NikahRegistration = {
+    id : Nat;
+    nikahUniqueId : Text;
+    // Groom
+    groomName : Text;
+    groomFatherName : Text;
+    groomAddress : Text;
+    groomAadhaarHash : Text;
+    groomPhone : Text;
+    groomPhotoUrl : Text;
+    groomSignature : Text;
+    // Bride
+    brideName : Text;
+    brideFatherName : Text;
+    brideAddress : Text;
+    brideAadhaarHash : Text;
+    bridePhone : Text;
+    bridePhotoUrl : Text;
+    brideSignature : Text;
+    // Ceremony
+    nikahDate : Text;
+    masjidVenue : Text;
+    city : Text;
+    qaziName : Text;
+    qaziContact : Text;
+    qaziSignature : Text;
+    // Witnesses
+    witness1 : Text;
+    witness1Contact : Text;
+    witness1Signature : Text;
+    witness2 : Text;
+    witness2Contact : Text;
+    witness2Signature : Text;
+    // Masjid authority
+    masjidSignature : Text;
+    // Maher
+    maher : Text;
+    // Meta
+    status : NikahStatus;
+    registeredBy : Principal;
+    timestamp : Int;
   };
 
   module NikahRegistration {
@@ -69,7 +115,7 @@ actor {
     };
   };
 
-  // OLD MasjidProfile type (without upiId) — kept for stable variable migration compatibility
+  // OLD MasjidProfile type (without upiId) - kept for stable variable migration compatibility
   type OldMasjidProfile = {
     id : Nat; masjidName : Text; address : Text; city : Text; state : Text;
     contactPerson : Text; phone : Text; email : Text;
@@ -77,12 +123,28 @@ actor {
     status : MasjidStatus; registeredBy : Principal; timestamp : Int;
   };
 
-  // NEW MasjidProfile type (with upiId)
-  type MasjidProfile = {
+  // V2 MasjidProfile type (with upiId but no committee) - kept for migration
+  type MasjidProfileV2 = {
     id : Nat; masjidName : Text; address : Text; city : Text; state : Text;
     contactPerson : Text; phone : Text; email : Text;
     registrationNumber : Text; capacity : Nat; facilities : [Text];
     upiId : Text; status : MasjidStatus; registeredBy : Principal; timestamp : Int;
+  };
+
+  // NEW MasjidProfile type (with committee details and UTR)
+  type MasjidProfile = {
+    id : Nat; masjidName : Text; address : Text; city : Text; state : Text;
+    contactPerson : Text; phone : Text; email : Text;
+    registrationNumber : Text; capacity : Nat; facilities : [Text];
+    upiId : Text;
+    // Committee details
+    presidentName : Text; presidentPhone : Text;
+    secretaryName : Text; secretaryPhone : Text;
+    treasurerName : Text; treasurerPhone : Text;
+    // Payment
+    utrNumber : Text;
+    masjidRegistrationId : Text;
+    status : MasjidStatus; registeredBy : Principal; timestamp : Int;
   };
 
   type ZakatProfile = {
@@ -96,22 +158,35 @@ actor {
     goldRatePerGram : Float; silverRatePerGram : Float;
   };
 
+  // Registration settings (UPI for registration payment + fee)
+  type RegistrationSettings = {
+    upiId : Text;
+    feeAmount : Nat;
+  };
+
   // --- Stable state ---
   let matchEntries = Map.empty<(Text, Text), Nat>();
-  let nikahRegistrations = Map.empty<Nat, NikahRegistration>();
+  // Old nikah map - kept for upgrade compat, new registrations go to nikahRegistrationsV2
+  let nikahRegistrations = Map.empty<Nat, OldNikahRegistration>();
+  let nikahRegistrationsV2 = Map.empty<Nat, NikahRegistration>();
   let matrimonyProposals = Map.empty<Nat, MatrimonyProposal>();
   let jobPostings = Map.empty<Nat, JobPosting>();
   let userProfiles = Map.empty<Principal, UserProfile>();
 
   // OLD stable var kept for upgrade compatibility (no upiId)
-  stable let masjidProfiles = Map.empty<Nat, OldMasjidProfile>();
-  // NEW stable var with upiId
-  stable let masjidProfilesV2 = Map.empty<Nat, MasjidProfile>();
-  stable let zakatProfiles = Map.empty<Nat, ZakatProfile>();
+  let masjidProfiles = Map.empty<Nat, OldMasjidProfile>();
+  // V2 stable var with upiId (no committee) - kept for migration
+  let masjidProfilesV2 = Map.empty<Nat, MasjidProfileV2>();
+  // V3 stable var with committee + UTR
+  let masjidProfilesV3 = Map.empty<Nat, MasjidProfile>();
+  let zakatProfiles = Map.empty<Nat, ZakatProfile>();
 
   // donationInfo kept for upgrade compatibility
   stable var donationInfo : ?DonationInfo = null;
   stable var zakatSettings : ?ZakatSettings = null;
+
+  // Registration settings
+  stable var registrationSettings : ?RegistrationSettings = null;
 
   stable var nextNikahId = 1;
   stable var nextProposalId = 1;
@@ -120,14 +195,33 @@ actor {
   stable var nextCertificateNumber = 1;
   stable var nextZakatProfileId = 1;
   stable var masjidMigrated = false;
+  stable var masjidMigratedV3 = false;
+  stable var nikahMigrated = false;
 
   // --- Stable Authorization State ---
-  // These survive canister upgrades so admin roles are not wiped on each deployment.
   stable var stableAdminAssigned : Bool = false;
   stable var stableUserRoles : [(Principal, AccessControl.UserRole)] = [];
 
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
+
+  // Helper: get current year from nanoseconds
+  func currentYear() : Text {
+    let nowSeconds = Time.now() / 1_000_000_000;
+    // Approximate: seconds since epoch / seconds per year
+    let yearsSinceEpoch = nowSeconds / 31_557_600;
+    let year = 1970 + yearsSinceEpoch;
+    year.toText();
+  };
+
+  // Helper: zero-pad Nat to 4 digits
+  func padId(n : Nat) : Text {
+    let s = n.toText();
+    if (s.size() >= 4) { s }
+    else if (s.size() == 3) { "0" # s }
+    else if (s.size() == 2) { "00" # s }
+    else { "000" # s };
+  };
 
   // Save auth state before upgrade
   system func preupgrade() {
@@ -143,7 +237,7 @@ actor {
       accessControlState.userRoles.add(p, r);
     };
 
-    // One-time migration from old masjid map (no upiId) to new map (with upiId)
+    // One-time migration from old masjid map (no upiId) to V2 map (with upiId)
     if (not masjidMigrated) {
       for ((id, old) in masjidProfiles.entries()) {
         masjidProfilesV2.add(id, {
@@ -156,6 +250,68 @@ actor {
         });
       };
       masjidMigrated := true;
+    };
+
+    // One-time migration from V2 (no committee) to V3 (with committee + UTR)
+    if (not masjidMigratedV3) {
+      for ((id, old) in masjidProfilesV2.entries()) {
+        masjidProfilesV3.add(id, {
+          id = old.id; masjidName = old.masjidName; address = old.address;
+          city = old.city; state = old.state; contactPerson = old.contactPerson;
+          phone = old.phone; email = old.email;
+          registrationNumber = old.registrationNumber; capacity = old.capacity;
+          facilities = old.facilities; upiId = old.upiId;
+          presidentName = ""; presidentPhone = "";
+          secretaryName = ""; secretaryPhone = "";
+          treasurerName = ""; treasurerPhone = "";
+          utrNumber = ""; masjidRegistrationId = "";
+          status = old.status; registeredBy = old.registeredBy; timestamp = old.timestamp;
+        });
+      };
+      masjidMigratedV3 := true;
+    };
+
+    // One-time migration from old nikah map to new V2 map
+    if (not nikahMigrated) {
+      for ((id, old) in nikahRegistrations.entries()) {
+        nikahRegistrationsV2.add(id, {
+          id = old.id;
+          nikahUniqueId = "NIKAH-" # currentYear() # "-" # padId(old.id);
+          groomName = old.groomName;
+          groomFatherName = "";
+          groomAddress = "";
+          groomAadhaarHash = old.groomAadhaarHash;
+          groomPhone = "";
+          groomPhotoUrl = "";
+          groomSignature = "";
+          brideName = old.brideName;
+          brideFatherName = "";
+          brideAddress = "";
+          brideAadhaarHash = old.brideAadhaarHash;
+          bridePhone = "";
+          bridePhotoUrl = "";
+          brideSignature = "";
+          nikahDate = old.nikahDate;
+          masjidVenue = old.masjidVenue;
+          city = old.city;
+          qaziName = old.qaziName;
+          qaziContact = "";
+          qaziSignature = "";
+          witness1 = old.witness1;
+          witness1Contact = "";
+          witness1Signature = "";
+          witness2 = old.witness2;
+          witness2Contact = "";
+          witness2Signature = "";
+          masjidSignature = "";
+          maher = "";
+          status = old.status;
+          registeredBy = old.registeredBy;
+          timestamp = old.timestamp;
+        });
+        matchEntries.add((old.brideAadhaarHash, old.groomAadhaarHash), id);
+      };
+      nikahMigrated := true;
     };
   };
 
@@ -175,20 +331,14 @@ actor {
       accessControlState.userRoles.remove(p);
     };
     accessControlState.adminAssigned := false;
-    // Also clear stable copies so the reset persists through any future upgrade
     stableAdminAssigned := false;
     stableUserRoles := [];
   };
 
-  // Claim admin role when no admin is assigned yet (e.g. after a reset).
-  // Works correctly whether or not _initializeAccessControlWithSecret has been called first.
-  // Explicitly removes any prior role before setting admin to guarantee the overwrite.
   public shared ({ caller }) func claimAdminIfUnassigned() : async Bool {
     if (caller.isAnonymous()) { return false };
     if (not accessControlState.adminAssigned) {
-      // Remove any existing entry (e.g. #user set by _initializeAccessControlWithSecret)
-      // so the add below always takes effect regardless of Map.add overwrite semantics.
-      ignore accessControlState.userRoles.remove(caller);
+      accessControlState.userRoles.remove(caller);
       accessControlState.userRoles.add(caller, #admin);
       accessControlState.adminAssigned := true;
       stableAdminAssigned := true;
@@ -198,9 +348,18 @@ actor {
     return false;
   };
 
-  // Returns whether an admin has been assigned to the system.
   public query func isAdminAssigned() : async Bool {
     accessControlState.adminAssigned;
+  };
+
+  // --- Registration Settings ---
+  public shared ({ caller }) func setRegistrationSettings(upiId : Text, feeAmount : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
+    registrationSettings := ?{ upiId; feeAmount };
+  };
+
+  public query func getRegistrationSettings() : async ?RegistrationSettings {
+    registrationSettings;
   };
 
   // --- Nikah Registration ---
@@ -213,19 +372,48 @@ actor {
     };
     let id = nextNikahId;
     nextNikahId += 1;
-    nikahRegistrations.add(id, {
-      id; brideName = reg.brideName; groomName = reg.groomName;
-      brideAadhaarHash = reg.brideAadhaarHash; groomAadhaarHash = reg.groomAadhaarHash;
-      nikahDate = reg.nikahDate; masjidVenue = reg.masjidVenue; qaziName = reg.qaziName;
-      witness1 = reg.witness1; witness2 = reg.witness2; city = reg.city;
-      status = #pending; registeredBy = caller; timestamp = Time.now();
+    let uniqueId = "NIKAH-" # currentYear() # "-" # padId(id);
+    nikahRegistrationsV2.add(id, {
+      id;
+      nikahUniqueId = uniqueId;
+      groomName = reg.groomName;
+      groomFatherName = reg.groomFatherName;
+      groomAddress = reg.groomAddress;
+      groomAadhaarHash = reg.groomAadhaarHash;
+      groomPhone = reg.groomPhone;
+      groomPhotoUrl = reg.groomPhotoUrl;
+      groomSignature = reg.groomSignature;
+      brideName = reg.brideName;
+      brideFatherName = reg.brideFatherName;
+      brideAddress = reg.brideAddress;
+      brideAadhaarHash = reg.brideAadhaarHash;
+      bridePhone = reg.bridePhone;
+      bridePhotoUrl = reg.bridePhotoUrl;
+      brideSignature = reg.brideSignature;
+      nikahDate = reg.nikahDate;
+      masjidVenue = reg.masjidVenue;
+      city = reg.city;
+      qaziName = reg.qaziName;
+      qaziContact = reg.qaziContact;
+      qaziSignature = reg.qaziSignature;
+      witness1 = reg.witness1;
+      witness1Contact = reg.witness1Contact;
+      witness1Signature = reg.witness1Signature;
+      witness2 = reg.witness2;
+      witness2Contact = reg.witness2Contact;
+      witness2Signature = reg.witness2Signature;
+      masjidSignature = reg.masjidSignature;
+      maher = reg.maher;
+      status = #pending;
+      registeredBy = caller;
+      timestamp = Time.now();
     });
     matchEntries.add((reg.brideAadhaarHash, reg.groomAadhaarHash), id);
     id;
   };
 
   public query ({ caller }) func getNikahRegistration(id : Nat) : async ?NikahRegistration {
-    switch (nikahRegistrations.get(id)) {
+    switch (nikahRegistrationsV2.get(id)) {
       case (null) { null };
       case (?r) {
         if (AccessControl.isAdmin(accessControlState, caller) or isMasjidOfficial(caller) or r.registeredBy == caller) {
@@ -235,33 +423,40 @@ actor {
     };
   };
 
+  // Admin gets all; use getCallerNikahRegistrations for masjid-scoped view
   public query ({ caller }) func getAllNikahRegistrations() : async [NikahRegistration] {
-    if (not (AccessControl.isAdmin(accessControlState, caller) or isMasjidOfficial(caller))) {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
       Runtime.trap("Unauthorized");
     };
-    nikahRegistrations.values().toArray().sort();
+    nikahRegistrationsV2.values().toArray().sort();
+  };
+
+  // Masjid panel: returns only registrations submitted by the calling principal
+  public query ({ caller }) func getCallerNikahRegistrations() : async [NikahRegistration] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) Runtime.trap("Unauthorized");
+    nikahRegistrationsV2.values().toArray().filter(func(r) { r.registeredBy == caller });
   };
 
   public query ({ caller }) func getPendingNikahRegistrations() : async [NikahRegistration] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
       Runtime.trap("Unauthorized");
     };
-    nikahRegistrations.values().toArray().filter(func(r) { r.status == #pending }).sort();
+    nikahRegistrationsV2.values().toArray().filter(func(r) { r.status == #pending }).sort();
   };
 
   public shared ({ caller }) func approveNikahRegistration(id : Nat) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
-    switch (nikahRegistrations.get(id)) {
+    switch (nikahRegistrationsV2.get(id)) {
       case (null) { Runtime.trap("Not found") };
-      case (?r) { nikahRegistrations.add(id, { r with status = #approved }) };
+      case (?r) { nikahRegistrationsV2.add(id, { r with status = #approved }) };
     };
   };
 
   public shared ({ caller }) func rejectNikahRegistration(id : Nat) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
-    switch (nikahRegistrations.get(id)) {
+    switch (nikahRegistrationsV2.get(id)) {
       case (null) { Runtime.trap("Not found") };
-      case (?r) { nikahRegistrations.add(id, { r with status = #rejected }) };
+      case (?r) { nikahRegistrationsV2.add(id, { r with status = #rejected }) };
     };
   };
 
@@ -282,6 +477,12 @@ actor {
     matrimonyProposals.values().toArray();
   };
 
+  // Masjid-scoped: only proposals posted by the calling principal
+  public query ({ caller }) func getCallerMatrimonyProposals() : async [MatrimonyProposal] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) Runtime.trap("Unauthorized");
+    matrimonyProposals.values().toArray().filter(func(p) { p.postedBy == caller });
+  };
+
   // --- Jobs ---
   public shared ({ caller }) func postJobPosting(job : JobPosting) : async Nat {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) Runtime.trap("Unauthorized");
@@ -299,10 +500,16 @@ actor {
     jobPostings.values().toArray();
   };
 
+  // Masjid-scoped: only job postings by the calling principal
+  public query ({ caller }) func getCallerJobPostings() : async [JobPosting] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) Runtime.trap("Unauthorized");
+    jobPostings.values().toArray().filter(func(j) { j.postedBy == caller });
+  };
+
   // --- Certificate ---
   public shared ({ caller }) func generateCertificate(nikahId : Nat) : async Certificate {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) Runtime.trap("Unauthorized");
-    switch (nikahRegistrations.get(nikahId)) {
+    switch (nikahRegistrationsV2.get(nikahId)) {
       case (null) { Runtime.trap("Not found") };
       case (?r) {
         if (r.status != #approved) Runtime.trap("Only approved registrations can have certificates");
@@ -329,46 +536,52 @@ actor {
     userProfiles.get(caller);
   };
 
-  // --- Masjid Registration (using V2 map) ---
-  public shared ({ caller }) func submitMasjidRegistration(profile : MasjidProfile) : async Nat {
+  // --- Masjid Registration (using V3 map) ---
+  public shared ({ caller }) func submitMasjidRegistration(profile : MasjidProfile) : async Text {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) Runtime.trap("Unauthorized");
     let id = nextMasjidId;
     nextMasjidId += 1;
-    masjidProfilesV2.add(id, {
+    let regId = "MASJID-" # currentYear() # "-" # padId(id);
+    masjidProfilesV3.add(id, {
       id; masjidName = profile.masjidName; address = profile.address;
       city = profile.city; state = profile.state; contactPerson = profile.contactPerson;
       phone = profile.phone; email = profile.email;
       registrationNumber = profile.registrationNumber; capacity = profile.capacity;
       facilities = profile.facilities; upiId = profile.upiId;
+      presidentName = profile.presidentName; presidentPhone = profile.presidentPhone;
+      secretaryName = profile.secretaryName; secretaryPhone = profile.secretaryPhone;
+      treasurerName = profile.treasurerName; treasurerPhone = profile.treasurerPhone;
+      utrNumber = profile.utrNumber;
+      masjidRegistrationId = regId;
       status = #pending; registeredBy = caller; timestamp = Time.now();
     });
-    id;
+    regId;
   };
 
   public query ({ caller }) func getCallerMasjidProfile() : async ?MasjidProfile {
-    masjidProfilesV2.values().toArray().find<MasjidProfile>(func(p) { p.registeredBy == caller });
+    masjidProfilesV3.values().toArray().find<MasjidProfile>(func(p) { p.registeredBy == caller });
   };
 
   public query func getApprovedMasjids() : async [MasjidProfile] {
-    masjidProfilesV2.values().toArray().filter(func(m) { m.status == #approved });
+    masjidProfilesV3.values().toArray().filter(func(m) { m.status == #approved });
   };
 
   public query ({ caller }) func getPendingMasjidRegistrations() : async [MasjidProfile] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
-    masjidProfilesV2.values().toArray().filter(func(m) { m.status == #pending });
+    masjidProfilesV3.values().toArray().filter(func(m) { m.status == #pending });
   };
 
   public query ({ caller }) func getAllMasjidRegistrations() : async [MasjidProfile] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
-    masjidProfilesV2.values().toArray();
+    masjidProfilesV3.values().toArray();
   };
 
   public shared ({ caller }) func approveMasjidRegistration(id : Nat) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
-    switch (masjidProfilesV2.get(id)) {
+    switch (masjidProfilesV3.get(id)) {
       case (null) { Runtime.trap("Not found") };
       case (?p) {
-        masjidProfilesV2.add(id, { p with status = #approved });
+        masjidProfilesV3.add(id, { p with status = #approved });
         switch (userProfiles.get(p.registeredBy)) {
           case (null) { () };
           case (?up) { userProfiles.add(p.registeredBy, { up with isMasjid = true }) };
@@ -379,33 +592,100 @@ actor {
 
   public shared ({ caller }) func rejectMasjidRegistration(id : Nat) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
-    switch (masjidProfilesV2.get(id)) {
+    switch (masjidProfilesV3.get(id)) {
       case (null) { Runtime.trap("Not found") };
-      case (?p) { masjidProfilesV2.add(id, { p with status = #rejected }) };
+      case (?p) { masjidProfilesV3.add(id, { p with status = #rejected }) };
     };
   };
 
   public shared ({ caller }) func adminUpdateMasjidProfile(id : Nat, profile : MasjidProfile) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
-    switch (masjidProfilesV2.get(id)) {
+    switch (masjidProfilesV3.get(id)) {
       case (null) { Runtime.trap("Not found") };
       case (?existing) {
-        masjidProfilesV2.add(id, {
+        masjidProfilesV3.add(id, {
           profile with id; registeredBy = existing.registeredBy; timestamp = existing.timestamp;
+          masjidRegistrationId = existing.masjidRegistrationId;
         });
       };
     };
   };
 
-  public shared ({ caller }) func updateCallerMasjidProfile(profile : MasjidProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) Runtime.trap("Unauthorized");
-    switch (masjidProfilesV2.values().toArray().find<MasjidProfile>(func(p) { p.registeredBy == caller })) {
-      case (null) { Runtime.trap("No masjid profile found") };
+  public shared ({ caller }) func adminDeleteMasjidRegistration(id : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
+    switch (masjidProfilesV3.get(id)) {
+      case (null) { Runtime.trap("Not found") };
+      case (?p) {
+        masjidProfilesV3.remove(id);
+        switch (userProfiles.get(p.registeredBy)) {
+          case (null) { () };
+          case (?up) { userProfiles.add(p.registeredBy, { up with isMasjid = false }) };
+        };
+      };
+    };
+  };
+
+  // Admin: delete and edit nikah registrations
+  public shared ({ caller }) func adminDeleteNikahRegistration(id : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
+    switch (nikahRegistrationsV2.get(id)) {
+      case (null) { Runtime.trap("Not found") };
+      case (?r) {
+        nikahRegistrationsV2.remove(id);
+        matchEntries.remove((r.brideAadhaarHash, r.groomAadhaarHash));
+      };
+    };
+  };
+
+  public shared ({ caller }) func adminUpdateNikahRegistration(id : Nat, reg : NikahRegistration) : async () {
+  if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
+    switch (nikahRegistrationsV2.get(id)) {
+      case (null) { Runtime.trap("Not found") };
       case (?existing) {
-        masjidProfilesV2.add(existing.id, {
-          profile with id = existing.id; status = existing.status;
+        matchEntries.remove((existing.brideAadhaarHash, existing.groomAadhaarHash));
+        nikahRegistrationsV2.add(id, {
+          reg with id; nikahUniqueId = existing.nikahUniqueId;
           registeredBy = existing.registeredBy; timestamp = existing.timestamp;
         });
+        matchEntries.add((reg.brideAadhaarHash, reg.groomAadhaarHash), id);
+      };
+    };
+  };
+
+  // Admin: delete and edit matrimony proposals
+  public shared ({ caller }) func adminDeleteMatrimonyProposal(id : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
+    switch (matrimonyProposals.get(id)) {
+      case (null) { Runtime.trap("Not found") };
+      case (_) { matrimonyProposals.remove(id) };
+    };
+  };
+
+  public shared ({ caller }) func adminUpdateMatrimonyProposal(id : Nat, p : MatrimonyProposal) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
+    switch (matrimonyProposals.get(id)) {
+      case (null) { Runtime.trap("Not found") };
+      case (?existing) {
+        matrimonyProposals.add(id, { p with id; postedBy = existing.postedBy; timestamp = existing.timestamp });
+      };
+    };
+  };
+
+  // Admin: delete and edit job postings
+  public shared ({ caller }) func adminDeleteJobPosting(id : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
+    switch (jobPostings.get(id)) {
+      case (null) { Runtime.trap("Not found") };
+      case (_) { jobPostings.remove(id) };
+    };
+  };
+
+  public shared ({ caller }) func adminUpdateJobPosting(id : Nat, job : JobPosting) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) Runtime.trap("Unauthorized");
+    switch (jobPostings.get(id)) {
+      case (null) { Runtime.trap("Not found") };
+      case (?existing) {
+        jobPostings.add(id, { job with id; postedBy = existing.postedBy; timestamp = existing.timestamp });
       };
     };
   };

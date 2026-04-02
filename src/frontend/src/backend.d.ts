@@ -7,6 +7,11 @@ export interface ZakatSettings {
   silverRatePerGram: number;
 }
 
+export interface RegistrationSettings {
+  upiId: string;
+  feeAmount: bigint;
+}
+
 export interface MatrimonyProposal {
   id: bigint;
   age: bigint;
@@ -23,19 +28,45 @@ export interface MatrimonyProposal {
 
 export interface NikahRegistration {
   id: bigint;
-  status: NikahStatus;
-  brideAadhaarHash: string;
-  city: string;
-  nikahDate: string;
-  qaziName: string;
-  brideName: string;
-  witness1: string;
-  witness2: string;
-  timestamp: bigint;
+  nikahUniqueId: string;
+  // Groom
   groomName: string;
+  groomFatherName: string;
+  groomAddress: string;
   groomAadhaarHash: string;
-  registeredBy: Principal;
+  groomPhone: string;
+  groomPhotoUrl: string;
+  groomSignature: string;
+  // Bride
+  brideName: string;
+  brideFatherName: string;
+  brideAddress: string;
+  brideAadhaarHash: string;
+  bridePhone: string;
+  bridePhotoUrl: string;
+  brideSignature: string;
+  // Ceremony
+  nikahDate: string;
   masjidVenue: string;
+  city: string;
+  qaziName: string;
+  qaziContact: string;
+  qaziSignature: string;
+  // Witnesses
+  witness1: string;
+  witness1Contact: string;
+  witness1Signature: string;
+  witness2: string;
+  witness2Contact: string;
+  witness2Signature: string;
+  // Masjid authority
+  masjidSignature: string;
+  // Maher
+  maher: string;
+  // Meta
+  status: NikahStatus;
+  registeredBy: Principal;
+  timestamp: bigint;
 }
 
 export interface JobPosting {
@@ -77,6 +108,16 @@ export interface MasjidProfile {
   upiId: string;
   capacity: bigint;
   registeredBy: Principal;
+  // Committee details
+  presidentName: string;
+  presidentPhone: string;
+  secretaryName: string;
+  secretaryPhone: string;
+  treasurerName: string;
+  treasurerPhone: string;
+  // Payment
+  utrNumber: string;
+  masjidRegistrationId: string;
 }
 
 export interface ZakatProfile {
@@ -121,42 +162,63 @@ export enum UserRole {
 }
 
 export interface backendInterface {
+  // Registration settings
+  setRegistrationSettings(upiId: string, feeAmount: bigint): Promise<void>;
+  getRegistrationSettings(): Promise<RegistrationSettings | null>;
+  // Masjid management (admin only)
   approveMasjidRegistration(id: bigint): Promise<void>;
-  approveNikahRegistration(id: bigint): Promise<void>;
-  assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
-  generateCertificate(nikahId: bigint): Promise<Certificate>;
-  getAllJobPostings(): Promise<Array<JobPosting>>;
+  rejectMasjidRegistration(id: bigint): Promise<void>;
+  adminUpdateMasjidProfile(id: bigint, profile: MasjidProfile): Promise<void>;
+  adminDeleteMasjidRegistration(id: bigint): Promise<void>;
+  getPendingMasjidRegistrations(): Promise<Array<MasjidProfile>>;
   getAllMasjidRegistrations(): Promise<Array<MasjidProfile>>;
-  getAllMatrimonyProposals(): Promise<Array<MatrimonyProposal>>;
-  getAllNikahRegistrations(): Promise<Array<NikahRegistration>>;
-  getAllZakatProfiles(): Promise<Array<ZakatProfile>>;
   getApprovedMasjids(): Promise<Array<MasjidProfile>>;
   getCallerMasjidProfile(): Promise<MasjidProfile | null>;
-  getCallerUserProfile(): Promise<UserProfile | null>;
-  getCallerUserRole(): Promise<UserRole>;
-  getNikahRegistration(id: bigint): Promise<NikahRegistration | null>;
-  getOpenZakatProfiles(): Promise<Array<ZakatProfile>>;
-  getPendingMasjidRegistrations(): Promise<Array<MasjidProfile>>;
-  getPendingNikahRegistrations(): Promise<Array<NikahRegistration>>;
-  getUserProfile(user: Principal): Promise<UserProfile | null>;
-  getZakatProfilesByMasjid(masjidId: bigint): Promise<Array<ZakatProfile>>;
-  getZakatSettings(): Promise<ZakatSettings | null>;
-  isCallerAdmin(): Promise<boolean>;
-  isAdminAssigned(): Promise<boolean>;
-  claimAdminIfUnassigned(): Promise<boolean>;
-  markZakatProfileFulfilled(id: bigint): Promise<void>;
-  postJobPosting(job: JobPosting): Promise<bigint>;
-  postMatrimonyProposal(proposal: MatrimonyProposal): Promise<bigint>;
-  rejectMasjidRegistration(id: bigint): Promise<void>;
+  submitMasjidRegistration(profile: MasjidProfile): Promise<string>;
+  // Nikah management
+  approveNikahRegistration(id: bigint): Promise<void>;
   rejectNikahRegistration(id: bigint): Promise<void>;
-  saveCallerUserProfile(profile: UserProfile): Promise<void>;
-  submitMasjidRegistration(profile: MasjidProfile): Promise<bigint>;
+  adminDeleteNikahRegistration(id: bigint): Promise<void>;
+  adminUpdateNikahRegistration(id: bigint, registration: NikahRegistration): Promise<void>;
+  getAllNikahRegistrations(): Promise<Array<NikahRegistration>>;
+  getCallerNikahRegistrations(): Promise<Array<NikahRegistration>>;
+  getPendingNikahRegistrations(): Promise<Array<NikahRegistration>>;
+  getNikahRegistration(id: bigint): Promise<NikahRegistration | null>;
   submitNikahRegistration(registration: NikahRegistration): Promise<bigint>;
-  updateCallerMasjidProfile(profile: MasjidProfile): Promise<void>;
-  adminUpdateMasjidProfile(id: bigint, profile: MasjidProfile): Promise<void>;
+  generateCertificate(nikahId: bigint): Promise<Certificate>;
+  // Matrimony management
+  getAllMatrimonyProposals(): Promise<Array<MatrimonyProposal>>;
+  getCallerMatrimonyProposals(): Promise<Array<MatrimonyProposal>>;
+  postMatrimonyProposal(proposal: MatrimonyProposal): Promise<bigint>;
+  adminDeleteMatrimonyProposal(id: bigint): Promise<void>;
+  adminUpdateMatrimonyProposal(id: bigint, proposal: MatrimonyProposal): Promise<void>;
+  // Jobs management
+  getAllJobPostings(): Promise<Array<JobPosting>>;
+  getCallerJobPostings(): Promise<Array<JobPosting>>;
+  postJobPosting(job: JobPosting): Promise<bigint>;
+  adminDeleteJobPosting(id: bigint): Promise<void>;
+  adminUpdateJobPosting(id: bigint, job: JobPosting): Promise<void>;
+  // Zakat profiles
+  getOpenZakatProfiles(): Promise<Array<ZakatProfile>>;
+  getAllZakatProfiles(): Promise<Array<ZakatProfile>>;
+  getZakatProfilesByMasjid(masjidId: bigint): Promise<Array<ZakatProfile>>;
   createZakatProfile(profile: ZakatProfile): Promise<bigint>;
   updateZakatProfile(id: bigint, profile: ZakatProfile): Promise<void>;
   deleteZakatProfile(id: bigint): Promise<void>;
+  markZakatProfileFulfilled(id: bigint): Promise<void>;
   updateZakatCollectedAmount(id: bigint, amount: number): Promise<void>;
+  // Zakat settings
+  getZakatSettings(): Promise<ZakatSettings | null>;
   updateZakatSettings(settings: ZakatSettings): Promise<void>;
+  // User profile
+  assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+  getCallerUserProfile(): Promise<UserProfile | null>;
+  getUserProfile(user: Principal): Promise<UserProfile | null>;
+  saveCallerUserProfile(profile: UserProfile): Promise<void>;
+  getCallerUserRole(): Promise<UserRole>;
+  // Admin / auth
+  isCallerAdmin(): Promise<boolean>;
+  isAdminAssigned(): Promise<boolean>;
+  claimAdminIfUnassigned(): Promise<boolean>;
+  resetAllRolesWithToken(token: string): Promise<void>;
 }

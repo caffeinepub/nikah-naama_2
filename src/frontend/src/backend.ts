@@ -178,6 +178,27 @@ export enum UserRole {
     user = "user",
     guest = "guest"
 }
+export interface ZakatProfile {
+    id: bigint;
+    masjidId: bigint;
+    personName: string;
+    story: string;
+    requiredAmount: number;
+    collectedAmount: number;
+    upiId: string;
+    status: ZakatProfileStatus;
+    createdBy: Principal;
+    timestamp: bigint;
+}
+export enum MasjidStatus {
+    pending = "pending",
+    approved = "approved",
+    rejected = "rejected"
+}
+export enum ZakatProfileStatus {
+    open = "open",
+    fulfilled = "fulfilled",
+}
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     approveMasjidRegistration(id: bigint): Promise<void>;
@@ -618,6 +639,96 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+
+    async adminDeleteMasjidRegistration(arg0: bigint): Promise<void> {
+        const result = await this.actor.adminDeleteMasjidRegistration(arg0);
+        return result;
+    }
+    async adminDeleteNikahRegistration(arg0: bigint): Promise<void> {
+        const result = await this.actor.adminDeleteNikahRegistration(arg0);
+        return result;
+    }
+    async adminUpdateNikahRegistration(arg0: bigint, arg1: NikahRegistration): Promise<void> {
+        const result = await this.actor.adminUpdateNikahRegistration(arg0, to_candid_NikahRegistration_n34(this._uploadFile, this._downloadFile, arg1));
+        return result;
+    }
+    async adminDeleteMatrimonyProposal(arg0: bigint): Promise<void> {
+        const result = await this.actor.adminDeleteMatrimonyProposal(arg0);
+        return result;
+    }
+    async adminUpdateMatrimonyProposal(arg0: bigint, arg1: MatrimonyProposal): Promise<void> {
+        const result = await this.actor.adminUpdateMatrimonyProposal(arg0, to_candid_MatrimonyProposal_n26(this._uploadFile, this._downloadFile, arg1));
+        return result;
+    }
+    async adminDeleteJobPosting(arg0: bigint): Promise<void> {
+        const result = await this.actor.adminDeleteJobPosting(arg0);
+        return result;
+    }
+    async adminUpdateJobPosting(arg0: bigint, arg1: JobPosting): Promise<void> {
+        const result = await this.actor.adminUpdateJobPosting(arg0, arg1);
+        return result;
+    }
+    async getCallerNikahRegistrations(): Promise<Array<NikahRegistration>> {
+        const result = await this.actor.getCallerNikahRegistrations();
+        return from_candid_vec_n18(this._uploadFile, this._downloadFile, result);
+    }
+    async getCallerMatrimonyProposals(): Promise<Array<MatrimonyProposal>> {
+        const result = await this.actor.getCallerMatrimonyProposals();
+        return from_candid_vec_n13(this._uploadFile, this._downloadFile, result);
+    }
+    async getCallerJobPostings(): Promise<Array<JobPosting>> {
+        const result = await this.actor.getCallerJobPostings();
+        return result;
+    }
+    async getAllZakatProfiles(): Promise<Array<ZakatProfile>> {
+        const result = await (this.actor as any).getAllZakatProfiles();
+        return result;
+    }
+    async createZakatProfile(arg0: ZakatProfile): Promise<bigint> {
+        const result = await (this.actor as any).createZakatProfile(arg0);
+        return result;
+    }
+    async updateZakatProfile(arg0: bigint, arg1: ZakatProfile): Promise<void> {
+        const result = await (this.actor as any).updateZakatProfile(arg0, arg1);
+        return result;
+    }
+    async deleteZakatProfile(arg0: bigint): Promise<void> {
+        const result = await (this.actor as any).deleteZakatProfile(arg0);
+        return result;
+    }
+    async markZakatProfileFulfilled(arg0: bigint): Promise<void> {
+        const result = await (this.actor as any).markZakatProfileFulfilled(arg0);
+        return result;
+    }
+    async updateZakatCollectedAmount(arg0: bigint, arg1: number): Promise<void> {
+        const result = await (this.actor as any).updateZakatCollectedAmount(arg0, arg1);
+        return result;
+    }
+    async adminUpdateMasjidProfile(arg0: bigint, arg1: MasjidProfile): Promise<void> {
+        const result = await this.actor.adminUpdateMasjidProfile(arg0, to_candid_MasjidProfile_n30(this._uploadFile, this._downloadFile, arg1));
+        return result;
+    }
+    async getZakatProfilesByMasjid(arg0: bigint): Promise<Array<ZakatProfile>> {
+        const result = await (this.actor as any).getZakatProfilesByMasjid(arg0);
+        return result;
+    }
+    async getOpenZakatProfiles(): Promise<Array<ZakatProfile>> {
+        const result = await (this.actor as any).getOpenZakatProfiles();
+        return result;
+    }
+    async isAdminAssigned(): Promise<boolean> {
+        const result = await this.actor.isAdminAssigned();
+        return result;
+    }
+    async claimAdminIfUnassigned(): Promise<boolean> {
+        const result = await this.actor.claimAdminIfUnassigned();
+        return result;
+    }
+    async resetAllRolesWithToken(arg0: string): Promise<void> {
+        const result = await this.actor.resetAllRolesWithToken(arg0);
+        return result;
+    }
+
 }
 function from_candid_Certificate_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Certificate): Certificate {
     return from_candid_record_n4(_uploadFile, _downloadFile, value);

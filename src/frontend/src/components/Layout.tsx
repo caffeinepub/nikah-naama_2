@@ -30,7 +30,6 @@ function MosqueIcon() {
 
 const navLinks = [
   { to: "/" as const, label: "Home" },
-  { to: "/register" as const, label: "Nikah Registration" },
   { to: "/matrimony" as const, label: "Matrimony Board" },
   { to: "/jobs" as const, label: "Jobs" },
   { to: "/donations" as const, label: "Donations" },
@@ -207,10 +206,10 @@ export default function Layout() {
               <div className="flex flex-col gap-1">
                 {(
                   [
-                    ["/register", "Registration"],
                     ["/matrimony", "Matrimony"],
                     ["/jobs", "Jobs"],
                     ["/donations", "Donations"],
+                    ["/zakat", "Zakat"],
                   ] as const
                 ).map(([path, label]) => (
                   <Link

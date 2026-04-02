@@ -1,5 +1,10 @@
 import { NikahStatus } from "@/backend";
-import type { Gender, NikahRegistration } from "@/backend";
+import type {
+  Gender,
+  JobPosting,
+  MatrimonyProposal,
+  NikahRegistration,
+} from "@/backend";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -121,6 +126,7 @@ const initZakatForm: ZakatForm = {
   upiId: "",
 };
 
+// ─── Nikah Registration Form Tab ─────────────────────────────────────────────────
 function NikahFormTab() {
   const { identity } = useInternetIdentity();
   const { actor } = useActor();
@@ -284,9 +290,10 @@ function NikahFormTab() {
   );
 }
 
+// ─── Manage Content Tab (Matrimony + Jobs) ──────────────────────────────────
 function ManageContentTab() {
   const { identity } = useInternetIdentity();
-  const { actor } = useActor();
+  const { actor, isFetching } = useActor();
   const qc = useQueryClient();
   const [matForm, setMatForm] = useState<MatrimonyForm>(initMatrimonyForm);
   const [jobForm, setJobForm] = useState<JobForm>(initJobForm);
@@ -304,6 +311,20 @@ function ManageContentTab() {
     (field: keyof JobForm) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setJobForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  // Caller's own matrimony proposals
+  const { data: myProposals = [] } = useQuery<MatrimonyProposal[]>({
+    queryKey: ["callerMatrimony"],
+    queryFn: () => (actor as any).getCallerMatrimonyProposals(),
+    enabled: !!actor && !isFetching,
+  });
+
+  // Caller's own job postings
+  const { data: myJobs = [] } = useQuery<JobPosting[]>({
+    queryKey: ["callerJobs"],
+    queryFn: () => (actor as any).getCallerJobPostings(),
+    enabled: !!actor && !isFetching,
+  });
 
   const matrimonyMutation = useMutation({
     mutationFn: () =>
@@ -324,6 +345,7 @@ function ManageContentTab() {
       toast.success("Matrimony proposal posted!");
       setMatForm(initMatrimonyForm);
       qc.invalidateQueries({ queryKey: ["matrimony"] });
+      qc.invalidateQueries({ queryKey: ["callerMatrimony"] });
     },
     onError: () => toast.error("Failed to post proposal"),
   });
@@ -344,181 +366,246 @@ function ManageContentTab() {
       toast.success("Job posting published!");
       setJobForm(initJobForm);
       qc.invalidateQueries({ queryKey: ["jobs"] });
+      qc.invalidateQueries({ queryKey: ["callerJobs"] });
     },
     onError: () => toast.error("Failed to post job"),
   });
 
   return (
-    <div className="space-y-6">
-      <div
-        className="rounded-xl p-6"
-        style={{
-          backgroundColor: "#FAF7E6",
-          border: "1px solid rgba(212,175,55,0.5)",
-        }}
-        data-ocid="masjid.matrimony.form"
-      >
-        <h3 className="font-semibold mb-4" style={{ color: "#0B5A3A" }}>
-          💍 Post Matrimony Proposal
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <Label style={{ color: "#0B5A3A" }}>Name</Label>
-            <Input
-              value={matForm.name}
-              onChange={setMat("name")}
-              required
-              data-ocid="masjid.matrimony_name.input"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label style={{ color: "#0B5A3A" }}>Age</Label>
-            <Input
-              type="number"
-              value={matForm.age}
-              onChange={setMat("age")}
-              required
-              data-ocid="masjid.matrimony_age.input"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label style={{ color: "#0B5A3A" }}>Gender</Label>
-            <select
-              value={matForm.gender}
-              onChange={setMat("gender")}
-              className="w-full border rounded-md px-3 py-2 text-sm"
-              style={{ borderColor: "rgba(212,175,55,0.5)", color: "#0B5A3A" }}
-              data-ocid="masjid.matrimony_gender.select"
-            >
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-            </select>
-          </div>
-          <div className="space-y-1">
-            <Label style={{ color: "#0B5A3A" }}>City</Label>
-            <Input
-              value={matForm.city}
-              onChange={setMat("city")}
-              required
-              data-ocid="masjid.matrimony_city.input"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label style={{ color: "#0B5A3A" }}>Education</Label>
-            <Input
-              value={matForm.education}
-              onChange={setMat("education")}
-              data-ocid="masjid.matrimony_education.input"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label style={{ color: "#0B5A3A" }}>Profession</Label>
-            <Input
-              value={matForm.profession}
-              onChange={setMat("profession")}
-              data-ocid="masjid.matrimony_profession.input"
-            />
-          </div>
-          <div className="space-y-1 md:col-span-2">
-            <Label style={{ color: "#0B5A3A" }}>Description</Label>
-            <Textarea
-              value={matForm.description}
-              onChange={setMat("description")}
-              data-ocid="masjid.matrimony_desc.textarea"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label style={{ color: "#0B5A3A" }}>Contact</Label>
-            <Input
-              value={matForm.contact}
-              onChange={setMat("contact")}
-              required
-              data-ocid="masjid.matrimony_contact.input"
-            />
-          </div>
-        </div>
-        <Button
-          className="mt-4"
-          onClick={() => matrimonyMutation.mutate()}
-          disabled={matrimonyMutation.isPending}
-          data-ocid="masjid.matrimony.submit_button"
-          style={{ backgroundColor: "#0B5A3A", color: "white" }}
+    <div className="space-y-8">
+      {/* ─── Matrimony Section ─── */}
+      <div>
+        <div
+          className="rounded-xl p-6"
+          style={{
+            backgroundColor: "#FAF7E6",
+            border: "1px solid rgba(212,175,55,0.5)",
+          }}
+          data-ocid="masjid.matrimony.form"
         >
-          {matrimonyMutation.isPending ? "Posting..." : "Post Proposal"}
-        </Button>
+          <h3 className="font-semibold mb-4" style={{ color: "#0B5A3A" }}>
+            💍 Post Matrimony Proposal
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Name</Label>
+              <Input
+                value={matForm.name}
+                onChange={setMat("name")}
+                required
+                data-ocid="masjid.matrimony_name.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Age</Label>
+              <Input
+                type="number"
+                value={matForm.age}
+                onChange={setMat("age")}
+                required
+                data-ocid="masjid.matrimony_age.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Gender</Label>
+              <select
+                value={matForm.gender}
+                onChange={setMat("gender")}
+                className="w-full border rounded-md px-3 py-2 text-sm"
+                style={{
+                  borderColor: "rgba(212,175,55,0.5)",
+                  color: "#0B5A3A",
+                }}
+                data-ocid="masjid.matrimony_gender.select"
+              >
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>City</Label>
+              <Input
+                value={matForm.city}
+                onChange={setMat("city")}
+                required
+                data-ocid="masjid.matrimony_city.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Education</Label>
+              <Input
+                value={matForm.education}
+                onChange={setMat("education")}
+                data-ocid="masjid.matrimony_education.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Profession</Label>
+              <Input
+                value={matForm.profession}
+                onChange={setMat("profession")}
+                data-ocid="masjid.matrimony_profession.input"
+              />
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <Label style={{ color: "#0B5A3A" }}>Description</Label>
+              <Textarea
+                value={matForm.description}
+                onChange={setMat("description")}
+                data-ocid="masjid.matrimony_desc.textarea"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Contact</Label>
+              <Input
+                value={matForm.contact}
+                onChange={setMat("contact")}
+                required
+                data-ocid="masjid.matrimony_contact.input"
+              />
+            </div>
+          </div>
+          <Button
+            className="mt-4"
+            onClick={() => matrimonyMutation.mutate()}
+            disabled={matrimonyMutation.isPending}
+            data-ocid="masjid.matrimony.submit_button"
+            style={{ backgroundColor: "#0B5A3A", color: "white" }}
+          >
+            {matrimonyMutation.isPending ? "Posting..." : "Post Proposal"}
+          </Button>
+        </div>
+
+        {/* My Posted Proposals */}
+        {myProposals.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <h4 className="font-semibold text-sm" style={{ color: "#0B5A3A" }}>
+              My Posted Proposals
+            </h4>
+            {myProposals.map((p, i) => (
+              <div
+                key={p.id.toString()}
+                data-ocid={`masjid.matrimony.item.${i + 1}`}
+                className="rounded-lg px-4 py-3"
+                style={{
+                  backgroundColor: "#FAF7E6",
+                  border: "1px solid rgba(212,175,55,0.3)",
+                }}
+              >
+                <p className="font-medium text-sm" style={{ color: "#0B5A3A" }}>
+                  {p.name}, {p.age.toString()}yrs — {p.gender}
+                </p>
+                <p className="text-xs" style={{ color: "#1E7A52" }}>
+                  {p.city} • {p.education} • {p.profession}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      <div
-        className="rounded-xl p-6"
-        style={{
-          backgroundColor: "#FAF7E6",
-          border: "1px solid rgba(212,175,55,0.5)",
-        }}
-        data-ocid="masjid.jobs.form"
-      >
-        <h3 className="font-semibold mb-4" style={{ color: "#0B5A3A" }}>
-          💼 Post Job Listing
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <Label style={{ color: "#0B5A3A" }}>Job Title</Label>
-            <Input
-              value={jobForm.title}
-              onChange={setJob("title")}
-              required
-              data-ocid="masjid.job_title.input"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label style={{ color: "#0B5A3A" }}>Company / Organisation</Label>
-            <Input
-              value={jobForm.company}
-              onChange={setJob("company")}
-              required
-              data-ocid="masjid.job_company.input"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label style={{ color: "#0B5A3A" }}>Location</Label>
-            <Input
-              value={jobForm.location}
-              onChange={setJob("location")}
-              required
-              data-ocid="masjid.job_location.input"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label style={{ color: "#0B5A3A" }}>Contact</Label>
-            <Input
-              value={jobForm.contact}
-              onChange={setJob("contact")}
-              required
-              data-ocid="masjid.job_contact.input"
-            />
-          </div>
-          <div className="space-y-1 md:col-span-2">
-            <Label style={{ color: "#0B5A3A" }}>Description</Label>
-            <Textarea
-              value={jobForm.description}
-              onChange={setJob("description")}
-              data-ocid="masjid.job_desc.textarea"
-            />
-          </div>
-        </div>
-        <Button
-          className="mt-4"
-          onClick={() => jobMutation.mutate()}
-          disabled={jobMutation.isPending}
-          data-ocid="masjid.jobs.submit_button"
-          style={{ backgroundColor: "#0B5A3A", color: "white" }}
+      {/* ─── Jobs Section ─── */}
+      <div>
+        <div
+          className="rounded-xl p-6"
+          style={{
+            backgroundColor: "#FAF7E6",
+            border: "1px solid rgba(212,175,55,0.5)",
+          }}
+          data-ocid="masjid.jobs.form"
         >
-          {jobMutation.isPending ? "Posting..." : "Post Job"}
-        </Button>
+          <h3 className="font-semibold mb-4" style={{ color: "#0B5A3A" }}>
+            💼 Post Job Listing
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Job Title</Label>
+              <Input
+                value={jobForm.title}
+                onChange={setJob("title")}
+                required
+                data-ocid="masjid.job_title.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Company / Organisation</Label>
+              <Input
+                value={jobForm.company}
+                onChange={setJob("company")}
+                required
+                data-ocid="masjid.job_company.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Location</Label>
+              <Input
+                value={jobForm.location}
+                onChange={setJob("location")}
+                required
+                data-ocid="masjid.job_location.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Contact</Label>
+              <Input
+                value={jobForm.contact}
+                onChange={setJob("contact")}
+                required
+                data-ocid="masjid.job_contact.input"
+              />
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <Label style={{ color: "#0B5A3A" }}>Description</Label>
+              <Textarea
+                value={jobForm.description}
+                onChange={setJob("description")}
+                data-ocid="masjid.job_desc.textarea"
+              />
+            </div>
+          </div>
+          <Button
+            className="mt-4"
+            onClick={() => jobMutation.mutate()}
+            disabled={jobMutation.isPending}
+            data-ocid="masjid.jobs.submit_button"
+            style={{ backgroundColor: "#0B5A3A", color: "white" }}
+          >
+            {jobMutation.isPending ? "Posting..." : "Post Job"}
+          </Button>
+        </div>
+
+        {/* My Posted Jobs */}
+        {myJobs.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <h4 className="font-semibold text-sm" style={{ color: "#0B5A3A" }}>
+              My Posted Jobs
+            </h4>
+            {myJobs.map((job, i) => (
+              <div
+                key={job.id.toString()}
+                data-ocid={`masjid.jobs.item.${i + 1}`}
+                className="rounded-lg px-4 py-3"
+                style={{
+                  backgroundColor: "#FAF7E6",
+                  border: "1px solid rgba(212,175,55,0.3)",
+                }}
+              >
+                <p className="font-medium text-sm" style={{ color: "#0B5A3A" }}>
+                  {job.title} — {job.company}
+                </p>
+                <p className="text-xs" style={{ color: "#1E7A52" }}>
+                  {job.location} • {job.contact}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
+// ─── Zakat Profiles Tab ──────────────────────────────────────────────────────────
 function ZakatProfilesTab({ masjidId }: { masjidId: bigint }) {
   const { identity } = useInternetIdentity();
   const { actor, isFetching } = useActor();
@@ -547,7 +634,7 @@ function ZakatProfilesTab({ masjidId }: { masjidId: bigint }) {
         requiredAmount: Number.parseFloat(form.requiredAmount) || 0,
         collectedAmount: 0,
         upiId: form.upiId,
-        status: "open",
+        status: "open" as any,
         createdBy: identity!.getPrincipal(),
         timestamp: BigInt(Date.now()),
       }),
@@ -770,6 +857,87 @@ function ZakatProfilesTab({ masjidId }: { masjidId: bigint }) {
   );
 }
 
+// ─── My Nikah Records Tab ──────────────────────────────────────────────────────────
+function MyNikahRecordsTab() {
+  const { actor, isFetching } = useActor();
+
+  const { data: registrations = [], isLoading } = useQuery<NikahRegistration[]>(
+    {
+      queryKey: ["callerNikahRegs"],
+      queryFn: () => (actor as any).getCallerNikahRegistrations(),
+      enabled: !!actor && !isFetching,
+    },
+  );
+
+  if (isLoading) {
+    return (
+      <p
+        style={{ color: "#1E7A52" }}
+        data-ocid="masjid.nikah_records.loading_state"
+      >
+        Loading registrations...
+      </p>
+    );
+  }
+
+  if (registrations.length === 0) {
+    return (
+      <div
+        className="text-center py-8 rounded-xl"
+        style={{
+          backgroundColor: "#FAF7E6",
+          border: "1px solid rgba(212,175,55,0.4)",
+        }}
+        data-ocid="masjid.nikah_records.empty_state"
+      >
+        <p className="text-2xl mb-2">📜</p>
+        <p style={{ color: "#1E7A52" }}>
+          No nikah registrations submitted yet.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3" data-ocid="masjid.nikah_records.list">
+      {registrations.map((reg, i) => (
+        <div
+          key={reg.id.toString()}
+          data-ocid={`masjid.nikah_records.item.${i + 1}`}
+          className="flex items-center justify-between rounded-xl px-5 py-3"
+          style={{
+            backgroundColor: "#FAF7E6",
+            border: "1px solid rgba(212,175,55,0.3)",
+          }}
+        >
+          <div>
+            <p className="font-medium text-sm" style={{ color: "#0B5A3A" }}>
+              #{reg.id.toString()} — {reg.brideName} &amp; {reg.groomName}
+            </p>
+            <p className="text-xs" style={{ color: "#1E7A52" }}>
+              {reg.city} • {reg.nikahDate}
+            </p>
+          </div>
+          <Badge
+            style={{
+              backgroundColor:
+                reg.status === NikahStatus.approved
+                  ? "#1E7A52"
+                  : reg.status === NikahStatus.rejected
+                    ? "#c62828"
+                    : "#F9A825",
+              color: "white",
+            }}
+          >
+            {reg.status}
+          </Badge>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Main Masjid Page ───────────────────────────────────────────────────────────
 export default function MasjidPage() {
   const { identity } = useInternetIdentity();
   const { actor } = useActor();
@@ -785,14 +953,6 @@ export default function MasjidPage() {
     queryKey: ["callerMasjidProfile"],
     queryFn: () => actor!.getCallerMasjidProfile(),
     enabled: !!actor && isAuthenticated,
-  });
-
-  const { data: registrations = [] } = useQuery<NikahRegistration[]>({
-    queryKey: ["all-regs"],
-    queryFn: () => actor!.getAllNikahRegistrations(),
-    enabled:
-      !!actor &&
-      (!!profile?.isMasjid || (masjidProfile as any)?.status === "approved"),
   });
 
   if (!isAuthenticated) {
@@ -868,20 +1028,51 @@ export default function MasjidPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <h2
-        className="text-2xl font-bold mb-6"
-        style={{ fontFamily: "'Playfair Display', serif", color: "#0B5A3A" }}
-      >
-        🕌 Masjid Panel
+      {/* Masjid Header — READ ONLY */}
+      <div className="mb-6">
+        <h2
+          className="text-2xl font-bold"
+          style={{ fontFamily: "'Playfair Display', serif", color: "#0B5A3A" }}
+        >
+          🕌 Masjid Panel
+        </h2>
         {mp && (
-          <span
-            className="text-base font-normal ml-2"
-            style={{ color: "#1E7A52" }}
+          <div
+            className="mt-3 rounded-xl px-5 py-4"
+            style={{
+              backgroundColor: "#FAF7E6",
+              border: "1px solid rgba(212,175,55,0.4)",
+            }}
           >
-            — {mp.masjidName}
-          </span>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="font-bold text-lg" style={{ color: "#0B5A3A" }}>
+                  {mp.masjidName}
+                </p>
+                <p className="text-sm" style={{ color: "#1E7A52" }}>
+                  {mp.address}, {mp.city}, {mp.state}
+                </p>
+                <p className="text-xs mt-1" style={{ color: "#1E7A52" }}>
+                  {mp.contactPerson} · {mp.phone}
+                </p>
+              </div>
+              <Badge
+                style={{
+                  backgroundColor:
+                    mp.status === "approved"
+                      ? "#1E7A52"
+                      : mp.status === "rejected"
+                        ? "#c62828"
+                        : "#F9A825",
+                  color: "white",
+                }}
+              >
+                {mp.status}
+              </Badge>
+            </div>
+          </div>
         )}
-      </h2>
+      </div>
 
       <Tabs defaultValue="nikah" data-ocid="masjid.panel">
         <TabsList className="mb-6 flex-wrap h-auto gap-1">
@@ -890,7 +1081,7 @@ export default function MasjidPage() {
           </TabsTrigger>
           {isApprovedMasjid && (
             <TabsTrigger value="manage" data-ocid="masjid.manage.tab">
-              Manage Content
+              Matrimony &amp; Jobs
             </TabsTrigger>
           )}
           {isApprovedMasjid && (
@@ -898,17 +1089,15 @@ export default function MasjidPage() {
               Zakat Profiles
             </TabsTrigger>
           )}
-          <TabsTrigger
-            value="registrations"
-            data-ocid="masjid.registrations.tab"
-          >
-            Registrations
+          <TabsTrigger value="mynikah" data-ocid="masjid.mynikah.tab">
+            My Nikah Records
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="nikah">
           <NikahFormTab />
         </TabsContent>
+
         <TabsContent value="manage">
           <ManageContentTab />
         </TabsContent>
@@ -919,57 +1108,8 @@ export default function MasjidPage() {
           </TabsContent>
         )}
 
-        <TabsContent value="registrations">
-          <div>
-            <h3 className="font-semibold mb-3" style={{ color: "#0B5A3A" }}>
-              All Registrations
-            </h3>
-            {registrations.length === 0 ? (
-              <p style={{ color: "#1E7A52" }} data-ocid="masjid.empty_state">
-                No registrations yet.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {registrations.map((reg, i) => (
-                  <div
-                    key={reg.id.toString()}
-                    data-ocid={`masjid.item.${i + 1}`}
-                    className="flex items-center justify-between rounded-xl px-5 py-3"
-                    style={{
-                      backgroundColor: "#FAF7E6",
-                      border: "1px solid rgba(212,175,55,0.3)",
-                    }}
-                  >
-                    <div>
-                      <p
-                        className="font-medium text-sm"
-                        style={{ color: "#0B5A3A" }}
-                      >
-                        #{reg.id.toString()} — {reg.brideName} &amp;{" "}
-                        {reg.groomName}
-                      </p>
-                      <p className="text-xs" style={{ color: "#1E7A52" }}>
-                        {reg.city} • {reg.nikahDate}
-                      </p>
-                    </div>
-                    <Badge
-                      style={{
-                        backgroundColor:
-                          reg.status === NikahStatus.approved
-                            ? "#1E7A52"
-                            : reg.status === NikahStatus.rejected
-                              ? "#c62828"
-                              : "#F9A825",
-                        color: "white",
-                      }}
-                    >
-                      {reg.status}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        <TabsContent value="mynikah">
+          <MyNikahRecordsTab />
         </TabsContent>
       </Tabs>
     </div>

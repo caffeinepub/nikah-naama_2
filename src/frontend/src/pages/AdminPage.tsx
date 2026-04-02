@@ -1,17 +1,25 @@
 import { NikahStatus, UserRole } from "@/backend";
-import type { NikahRegistration, ZakatSettings } from "@/backend";
+import type {
+  JobPosting,
+  MatrimonyProposal,
+  NikahRegistration,
+  ZakatSettings,
+} from "@/backend";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useActor } from "@/hooks/useActor";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+
+const ADMIN_CLAIM_TOKEN = "NIKAHNAAMA_RESET_2026";
 
 interface LocalMasjidProfile {
   id: bigint;
@@ -29,6 +37,14 @@ interface LocalMasjidProfile {
   upiId: string;
   registeredBy: any;
   timestamp: bigint;
+  presidentName: string;
+  presidentPhone: string;
+  secretaryName: string;
+  secretaryPhone: string;
+  treasurerName: string;
+  treasurerPhone: string;
+  utrNumber: string;
+  masjidRegistrationId: string;
 }
 
 interface LocalZakatProfile {
@@ -54,6 +70,732 @@ function masjidStatusColor(s: string): string {
   return "#F9A825";
 }
 
+// ─── Nikah Edit Row ──────────────────────────────────────────────────────────
+function NikahEditRow({
+  reg,
+  onSave,
+  onDelete,
+}: {
+  reg: NikahRegistration;
+  onSave: (updated: NikahRegistration) => void;
+  onDelete: (id: bigint) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [form, setForm] = useState({
+    groomName: reg.groomName,
+    brideName: reg.brideName,
+    nikahDate: reg.nikahDate,
+    city: reg.city,
+    status: reg.status as string,
+  });
+
+  const set =
+    (field: keyof typeof form) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  const handleSave = () => {
+    onSave({
+      ...reg,
+      groomName: form.groomName,
+      brideName: form.brideName,
+      nikahDate: form.nikahDate,
+      city: form.city,
+      status: form.status as NikahStatus,
+    });
+    setEditing(false);
+  };
+
+  return (
+    <div
+      className="rounded-xl p-4"
+      style={{
+        backgroundColor: "#FAF7E6",
+        border: "1px solid rgba(212,175,55,0.3)",
+      }}
+    >
+      {!editing ? (
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1">
+            <p className="font-medium text-sm" style={{ color: "#0B5A3A" }}>
+              #{reg.id.toString()} — {reg.brideName} &amp; {reg.groomName}
+            </p>
+            <p className="text-xs" style={{ color: "#1E7A52" }}>
+              {reg.city} • {reg.nikahDate}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Badge
+              style={{
+                backgroundColor: statusColor(reg.status),
+                color: "white",
+              }}
+            >
+              {reg.status}
+            </Badge>
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditing(true);
+                setConfirmDelete(false);
+              }}
+              data-ocid="admin.nikah.edit_button"
+              style={{ backgroundColor: "#D4AF37", color: "#0B5A3A" }}
+            >
+              Edit
+            </Button>
+            {!confirmDelete ? (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setConfirmDelete(true)}
+                data-ocid="admin.nikah.delete_button"
+              >
+                Delete
+              </Button>
+            ) : (
+              <div className="flex items-center gap-1">
+                <span className="text-xs" style={{ color: "#c62828" }}>
+                  Sure?
+                </span>
+                <Button
+                  size="sm"
+                  style={{ backgroundColor: "#c62828", color: "white" }}
+                  onClick={() => onDelete(reg.id)}
+                  data-ocid="admin.nikah.confirm_button"
+                >
+                  Yes
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setConfirmDelete(false)}
+                  data-ocid="admin.nikah.cancel_button"
+                >
+                  No
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <h4 className="font-semibold text-sm" style={{ color: "#0B5A3A" }}>
+            Edit Nikah #{reg.id.toString()}
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Groom Name</Label>
+              <Input
+                value={form.groomName}
+                onChange={set("groomName")}
+                data-ocid="admin.nikah_edit.groom.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Bride Name</Label>
+              <Input
+                value={form.brideName}
+                onChange={set("brideName")}
+                data-ocid="admin.nikah_edit.bride.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Date of Nikah</Label>
+              <Input
+                type="date"
+                value={form.nikahDate}
+                onChange={set("nikahDate")}
+                data-ocid="admin.nikah_edit.date.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>City</Label>
+              <Input
+                value={form.city}
+                onChange={set("city")}
+                data-ocid="admin.nikah_edit.city.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Status</Label>
+              <select
+                value={form.status}
+                onChange={set("status")}
+                className="w-full border rounded-md px-3 py-2 text-sm"
+                style={{
+                  borderColor: "rgba(212,175,55,0.4)",
+                  color: "#0B5A3A",
+                }}
+                data-ocid="admin.nikah_edit.status.select"
+              >
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={handleSave}
+              data-ocid="admin.nikah_edit.save_button"
+              style={{ backgroundColor: "#0B5A3A", color: "white" }}
+            >
+              Save
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setEditing(false)}
+              data-ocid="admin.nikah_edit.cancel_button"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Matrimony Tab ─────────────────────────────────────────────────────────
+function MatrimonyAdminTab() {
+  const { actor, isFetching } = useActor();
+  const qc = useQueryClient();
+
+  const { data: proposals = [], isLoading } = useQuery<MatrimonyProposal[]>({
+    queryKey: ["adminMatrimony"],
+    queryFn: () => actor!.getAllMatrimonyProposals(),
+    enabled: !!actor && !isFetching,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: bigint) => (actor as any).adminDeleteMatrimonyProposal(id),
+    onSuccess: () => {
+      toast.success("Proposal deleted.");
+      qc.invalidateQueries({ queryKey: ["adminMatrimony"] });
+    },
+    onError: () => toast.error("Failed to delete"),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({
+      id,
+      proposal,
+    }: { id: bigint; proposal: MatrimonyProposal }) =>
+      (actor as any).adminUpdateMatrimonyProposal(id, proposal),
+    onSuccess: () => {
+      toast.success("Proposal updated.");
+      qc.invalidateQueries({ queryKey: ["adminMatrimony"] });
+    },
+    onError: () => toast.error("Failed to update"),
+  });
+
+  if (isLoading) {
+    return (
+      <p style={{ color: "#1E7A52" }} data-ocid="admin.matrimony.loading_state">
+        Loading...
+      </p>
+    );
+  }
+
+  if (proposals.length === 0) {
+    return (
+      <div
+        className="text-center py-8 rounded-xl"
+        style={{
+          backgroundColor: "#FAF7E6",
+          border: "1px solid rgba(212,175,55,0.4)",
+        }}
+        data-ocid="admin.matrimony.empty_state"
+      >
+        <p className="text-2xl mb-2">💍</p>
+        <p style={{ color: "#1E7A52" }}>No matrimony proposals yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3" data-ocid="admin.matrimony.list">
+      {proposals.map((p, i) => (
+        <MatrimonyEditRow
+          key={p.id.toString()}
+          proposal={p}
+          index={i + 1}
+          onSave={(updated) =>
+            updateMutation.mutate({ id: updated.id, proposal: updated })
+          }
+          onDelete={(id) => deleteMutation.mutate(id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function MatrimonyEditRow({
+  proposal,
+  index,
+  onSave,
+  onDelete,
+}: {
+  proposal: MatrimonyProposal;
+  index: number;
+  onSave: (updated: MatrimonyProposal) => void;
+  onDelete: (id: bigint) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [form, setForm] = useState({
+    name: proposal.name,
+    age: proposal.age.toString(),
+    city: proposal.city,
+    education: proposal.education,
+    profession: proposal.profession,
+    description: proposal.description,
+    contact: proposal.contact,
+    gender: proposal.gender as string,
+  });
+
+  const set =
+    (field: keyof typeof form) =>
+    (
+      e: React.ChangeEvent<
+        HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+      >,
+    ) =>
+      setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  const handleSave = () => {
+    onSave({
+      ...proposal,
+      name: form.name,
+      age: BigInt(Number.parseInt(form.age) || 0),
+      city: form.city,
+      education: form.education,
+      profession: form.profession,
+      description: form.description,
+      contact: form.contact,
+      gender: form.gender as any,
+    });
+    setEditing(false);
+  };
+
+  return (
+    <div
+      data-ocid={`admin.matrimony.item.${index}`}
+      className="rounded-xl p-4"
+      style={{
+        backgroundColor: "#FAF7E6",
+        border: "1px solid rgba(212,175,55,0.3)",
+      }}
+    >
+      {!editing ? (
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1">
+            <p className="font-medium text-sm" style={{ color: "#0B5A3A" }}>
+              {proposal.name}, {proposal.age.toString()}yrs — {proposal.gender}
+            </p>
+            <p className="text-xs" style={{ color: "#1E7A52" }}>
+              {proposal.city} • {proposal.education} • {proposal.profession}
+            </p>
+            <p className="text-xs mt-1" style={{ color: "#555" }}>
+              {proposal.description}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditing(true);
+                setConfirmDelete(false);
+              }}
+              data-ocid={`admin.matrimony.edit_button.${index}`}
+              style={{ backgroundColor: "#D4AF37", color: "#0B5A3A" }}
+            >
+              Edit
+            </Button>
+            {!confirmDelete ? (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setConfirmDelete(true)}
+                data-ocid={`admin.matrimony.delete_button.${index}`}
+              >
+                Delete
+              </Button>
+            ) : (
+              <div className="flex items-center gap-1">
+                <span className="text-xs" style={{ color: "#c62828" }}>
+                  Sure?
+                </span>
+                <Button
+                  size="sm"
+                  style={{ backgroundColor: "#c62828", color: "white" }}
+                  onClick={() => onDelete(proposal.id)}
+                  data-ocid={`admin.matrimony.confirm_button.${index}`}
+                >
+                  Yes
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setConfirmDelete(false)}
+                  data-ocid={`admin.matrimony.cancel_button.${index}`}
+                >
+                  No
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <h4 className="font-semibold text-sm" style={{ color: "#0B5A3A" }}>
+            Edit Proposal
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Name</Label>
+              <Input
+                value={form.name}
+                onChange={set("name")}
+                data-ocid={`admin.matrimony_edit.name.input.${index}`}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Age</Label>
+              <Input
+                type="number"
+                value={form.age}
+                onChange={set("age")}
+                data-ocid={`admin.matrimony_edit.age.input.${index}`}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Gender</Label>
+              <select
+                value={form.gender}
+                onChange={set("gender")}
+                className="w-full border rounded-md px-3 py-2 text-sm"
+                style={{
+                  borderColor: "rgba(212,175,55,0.4)",
+                  color: "#0B5A3A",
+                }}
+                data-ocid={`admin.matrimony_edit.gender.select.${index}`}
+              >
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>City</Label>
+              <Input
+                value={form.city}
+                onChange={set("city")}
+                data-ocid={`admin.matrimony_edit.city.input.${index}`}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Education</Label>
+              <Input
+                value={form.education}
+                onChange={set("education")}
+                data-ocid={`admin.matrimony_edit.education.input.${index}`}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Profession</Label>
+              <Input
+                value={form.profession}
+                onChange={set("profession")}
+                data-ocid={`admin.matrimony_edit.profession.input.${index}`}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Contact</Label>
+              <Input
+                value={form.contact}
+                onChange={set("contact")}
+                data-ocid={`admin.matrimony_edit.contact.input.${index}`}
+              />
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <Label style={{ color: "#0B5A3A" }}>Description</Label>
+              <Textarea
+                value={form.description}
+                onChange={set("description")}
+                data-ocid={`admin.matrimony_edit.desc.textarea.${index}`}
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={handleSave}
+              data-ocid={`admin.matrimony_edit.save_button.${index}`}
+              style={{ backgroundColor: "#0B5A3A", color: "white" }}
+            >
+              Save
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setEditing(false)}
+              data-ocid={`admin.matrimony_edit.cancel_button.${index}`}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Jobs Tab ─────────────────────────────────────────────────────────────
+function JobsAdminTab() {
+  const { actor, isFetching } = useActor();
+  const qc = useQueryClient();
+
+  const { data: jobs = [], isLoading } = useQuery<JobPosting[]>({
+    queryKey: ["adminJobs"],
+    queryFn: () => actor!.getAllJobPostings(),
+    enabled: !!actor && !isFetching,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: bigint) => (actor as any).adminDeleteJobPosting(id),
+    onSuccess: () => {
+      toast.success("Job deleted.");
+      qc.invalidateQueries({ queryKey: ["adminJobs"] });
+    },
+    onError: () => toast.error("Failed to delete"),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, job }: { id: bigint; job: JobPosting }) =>
+      (actor as any).adminUpdateJobPosting(id, job),
+    onSuccess: () => {
+      toast.success("Job updated.");
+      qc.invalidateQueries({ queryKey: ["adminJobs"] });
+    },
+    onError: () => toast.error("Failed to update"),
+  });
+
+  if (isLoading) {
+    return (
+      <p style={{ color: "#1E7A52" }} data-ocid="admin.jobs.loading_state">
+        Loading...
+      </p>
+    );
+  }
+
+  if (jobs.length === 0) {
+    return (
+      <div
+        className="text-center py-8 rounded-xl"
+        style={{
+          backgroundColor: "#FAF7E6",
+          border: "1px solid rgba(212,175,55,0.4)",
+        }}
+        data-ocid="admin.jobs.empty_state"
+      >
+        <p className="text-2xl mb-2">💼</p>
+        <p style={{ color: "#1E7A52" }}>No job postings yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3" data-ocid="admin.jobs.list">
+      {jobs.map((job, i) => (
+        <JobEditRow
+          key={job.id.toString()}
+          job={job}
+          index={i + 1}
+          onSave={(updated) =>
+            updateMutation.mutate({ id: updated.id, job: updated })
+          }
+          onDelete={(id) => deleteMutation.mutate(id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function JobEditRow({
+  job,
+  index,
+  onSave,
+  onDelete,
+}: {
+  job: JobPosting;
+  index: number;
+  onSave: (updated: JobPosting) => void;
+  onDelete: (id: bigint) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [form, setForm] = useState({
+    title: job.title,
+    company: job.company,
+    location: job.location,
+    description: job.description,
+    contact: job.contact,
+  });
+
+  const set =
+    (field: keyof typeof form) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  const handleSave = () => {
+    onSave({ ...job, ...form });
+    setEditing(false);
+  };
+
+  return (
+    <div
+      data-ocid={`admin.jobs.item.${index}`}
+      className="rounded-xl p-4"
+      style={{
+        backgroundColor: "#FAF7E6",
+        border: "1px solid rgba(212,175,55,0.3)",
+      }}
+    >
+      {!editing ? (
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1">
+            <p className="font-medium text-sm" style={{ color: "#0B5A3A" }}>
+              {job.title} — {job.company}
+            </p>
+            <p className="text-xs" style={{ color: "#1E7A52" }}>
+              {job.location} • {job.contact}
+            </p>
+            <p className="text-xs mt-1" style={{ color: "#555" }}>
+              {job.description}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditing(true);
+                setConfirmDelete(false);
+              }}
+              data-ocid={`admin.jobs.edit_button.${index}`}
+              style={{ backgroundColor: "#D4AF37", color: "#0B5A3A" }}
+            >
+              Edit
+            </Button>
+            {!confirmDelete ? (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setConfirmDelete(true)}
+                data-ocid={`admin.jobs.delete_button.${index}`}
+              >
+                Delete
+              </Button>
+            ) : (
+              <div className="flex items-center gap-1">
+                <span className="text-xs" style={{ color: "#c62828" }}>
+                  Sure?
+                </span>
+                <Button
+                  size="sm"
+                  style={{ backgroundColor: "#c62828", color: "white" }}
+                  onClick={() => onDelete(job.id)}
+                  data-ocid={`admin.jobs.confirm_button.${index}`}
+                >
+                  Yes
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setConfirmDelete(false)}
+                  data-ocid={`admin.jobs.cancel_button.${index}`}
+                >
+                  No
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <h4 className="font-semibold text-sm" style={{ color: "#0B5A3A" }}>
+            Edit Job
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Title</Label>
+              <Input
+                value={form.title}
+                onChange={set("title")}
+                data-ocid={`admin.jobs_edit.title.input.${index}`}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Company</Label>
+              <Input
+                value={form.company}
+                onChange={set("company")}
+                data-ocid={`admin.jobs_edit.company.input.${index}`}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Location</Label>
+              <Input
+                value={form.location}
+                onChange={set("location")}
+                data-ocid={`admin.jobs_edit.location.input.${index}`}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Contact</Label>
+              <Input
+                value={form.contact}
+                onChange={set("contact")}
+                data-ocid={`admin.jobs_edit.contact.input.${index}`}
+              />
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <Label style={{ color: "#0B5A3A" }}>Description</Label>
+              <Textarea
+                value={form.description}
+                onChange={set("description")}
+                data-ocid={`admin.jobs_edit.desc.textarea.${index}`}
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={handleSave}
+              data-ocid={`admin.jobs_edit.save_button.${index}`}
+              style={{ backgroundColor: "#0B5A3A", color: "white" }}
+            >
+              Save
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setEditing(false)}
+              data-ocid={`admin.jobs_edit.cancel_button.${index}`}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Masjid Edit Row ─────────────────────────────────────────────────────────
 interface EditMasjidForm {
   masjidName: string;
   address: string;
@@ -65,16 +807,25 @@ interface EditMasjidForm {
   registrationNumber: string;
   capacity: string;
   upiId: string;
+  presidentName: string;
+  presidentPhone: string;
+  secretaryName: string;
+  secretaryPhone: string;
+  treasurerName: string;
+  treasurerPhone: string;
 }
 
 function MasjidEditRow({
   m,
   onSave,
+  onDelete,
 }: {
   m: LocalMasjidProfile;
   onSave: (id: bigint, profile: LocalMasjidProfile) => void;
+  onDelete: (id: bigint) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [form, setForm] = useState<EditMasjidForm>({
     masjidName: m.masjidName,
     address: m.address,
@@ -86,6 +837,12 @@ function MasjidEditRow({
     registrationNumber: m.registrationNumber,
     capacity: m.capacity.toString(),
     upiId: m.upiId || "",
+    presidentName: m.presidentName || "",
+    presidentPhone: m.presidentPhone || "",
+    secretaryName: m.secretaryName || "",
+    secretaryPhone: m.secretaryPhone || "",
+    treasurerName: m.treasurerName || "",
+    treasurerPhone: m.treasurerPhone || "",
   });
 
   const set =
@@ -105,6 +862,12 @@ function MasjidEditRow({
       registrationNumber: form.registrationNumber,
       capacity: BigInt(Number.parseInt(form.capacity) || 0),
       upiId: form.upiId,
+      presidentName: form.presidentName,
+      presidentPhone: form.presidentPhone,
+      secretaryName: form.secretaryName,
+      secretaryPhone: form.secretaryPhone,
+      treasurerName: form.treasurerName,
+      treasurerPhone: form.treasurerPhone,
     });
     setEditing(false);
   };
@@ -119,7 +882,7 @@ function MasjidEditRow({
     >
       {!editing ? (
         <div className="flex justify-between items-start">
-          <div>
+          <div className="flex-1">
             <p className="font-semibold" style={{ color: "#0B5A3A" }}>
               {m.masjidName}
             </p>
@@ -134,6 +897,39 @@ function MasjidEditRow({
                 UPI: {m.upiId}
               </p>
             )}
+            {(m.masjidRegistrationId || m.utrNumber) && (
+              <div className="mt-1 space-y-0.5">
+                {m.masjidRegistrationId && (
+                  <p className="text-xs" style={{ color: "#0B5A3A" }}>
+                    Reg ID: <strong>{m.masjidRegistrationId}</strong>
+                  </p>
+                )}
+                {m.utrNumber && (
+                  <p className="text-xs" style={{ color: "#1E7A52" }}>
+                    UTR: {m.utrNumber}
+                  </p>
+                )}
+              </div>
+            )}
+            {(m.presidentName || m.secretaryName || m.treasurerName) && (
+              <div className="mt-1 text-xs" style={{ color: "#555" }}>
+                {m.presidentName && (
+                  <span>
+                    President: {m.presidentName} ({m.presidentPhone}) ·{" "}
+                  </span>
+                )}
+                {m.secretaryName && (
+                  <span>
+                    Secretary: {m.secretaryName} ({m.secretaryPhone}) ·{" "}
+                  </span>
+                )}
+                {m.treasurerName && (
+                  <span>
+                    Treasurer: {m.treasurerName} ({m.treasurerPhone})
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Badge
@@ -146,12 +942,47 @@ function MasjidEditRow({
             </Badge>
             <Button
               size="sm"
-              onClick={() => setEditing(true)}
+              onClick={() => {
+                setEditing(true);
+                setConfirmDelete(false);
+              }}
               data-ocid="admin.masjid.edit_button"
               style={{ backgroundColor: "#D4AF37", color: "#0B5A3A" }}
             >
               Edit
             </Button>
+            {!confirmDelete ? (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setConfirmDelete(true)}
+                data-ocid="admin.masjid.delete_button"
+              >
+                Delete
+              </Button>
+            ) : (
+              <div className="flex items-center gap-1">
+                <span className="text-xs" style={{ color: "#c62828" }}>
+                  Sure?
+                </span>
+                <Button
+                  size="sm"
+                  style={{ backgroundColor: "#c62828", color: "white" }}
+                  onClick={() => onDelete(m.id)}
+                  data-ocid="admin.masjid.confirm_button"
+                >
+                  Yes
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setConfirmDelete(false)}
+                  data-ocid="admin.masjid.cancel_button"
+                >
+                  No
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -235,12 +1066,80 @@ function MasjidEditRow({
               />
             </div>
             <div className="space-y-1">
-              <Label style={{ color: "#0B5A3A" }}>UPI ID for Donations</Label>
+              <Label style={{ color: "#0B5A3A" }}>UPI ID</Label>
               <Input
                 value={form.upiId}
                 onChange={set("upiId")}
                 placeholder="example@upi"
                 data-ocid="admin.edit_masjid.upi.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>President Name</Label>
+              <Input
+                value={form.presidentName}
+                onChange={set("presidentName")}
+                data-ocid="admin.edit_masjid.president_name.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>President Phone</Label>
+              <Input
+                value={form.presidentPhone}
+                onChange={set("presidentPhone")}
+                data-ocid="admin.edit_masjid.president_phone.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Secretary Name</Label>
+              <Input
+                value={form.secretaryName}
+                onChange={set("secretaryName")}
+                data-ocid="admin.edit_masjid.secretary_name.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Secretary Phone</Label>
+              <Input
+                value={form.secretaryPhone}
+                onChange={set("secretaryPhone")}
+                data-ocid="admin.edit_masjid.secretary_phone.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Treasurer Name</Label>
+              <Input
+                value={form.treasurerName}
+                onChange={set("treasurerName")}
+                data-ocid="admin.edit_masjid.treasurer_name.input"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label style={{ color: "#0B5A3A" }}>Treasurer Phone</Label>
+              <Input
+                value={form.treasurerPhone}
+                onChange={set("treasurerPhone")}
+                data-ocid="admin.edit_masjid.treasurer_phone.input"
+              />
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <Label style={{ color: "#555" }}>UTR Number (read-only)</Label>
+              <Input
+                value={m.utrNumber || "—"}
+                readOnly
+                className="bg-gray-50 text-gray-500"
+                data-ocid="admin.edit_masjid.utr.input"
+              />
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <Label style={{ color: "#555" }}>
+                Registration ID (read-only)
+              </Label>
+              <Input
+                value={m.masjidRegistrationId || "—"}
+                readOnly
+                className="bg-gray-50 text-gray-500"
+                data-ocid="admin.edit_masjid.reg_id.input"
               />
             </div>
           </div>
@@ -266,6 +1165,7 @@ function MasjidEditRow({
   );
 }
 
+// ─── Zakat Profiles Admin Tab ─────────────────────────────────────────────
 function ZakatProfilesAdminTab() {
   const { actor, isFetching } = useActor();
   const qc = useQueryClient();
@@ -390,7 +1290,6 @@ function ZakatProfilesAdminTab() {
               </div>
               <Progress value={pct} className="h-2" />
             </div>
-
             <div className="flex items-center gap-2 mb-3">
               <Input
                 type="number"
@@ -416,7 +1315,6 @@ function ZakatProfilesAdminTab() {
                 Update Amount
               </Button>
             </div>
-
             <div className="flex gap-2">
               <Button
                 size="sm"
@@ -443,6 +1341,7 @@ function ZakatProfilesAdminTab() {
   );
 }
 
+// ─── Admin Management Tab ─────────────────────────────────────────────────
 function AdminManagementTab() {
   const { actor } = useActor();
   const [principalInput, setPrincipalInput] = useState("");
@@ -479,7 +1378,6 @@ function AdminManagementTab() {
 
   return (
     <div className="max-w-md space-y-6" data-ocid="admin.admin_mgmt.form">
-      {/* Role Assignment */}
       <div
         className="rounded-xl p-6 space-y-4"
         style={{
@@ -492,7 +1390,7 @@ function AdminManagementTab() {
         </h3>
         <p className="text-xs" style={{ color: "#555" }}>
           Ask the person to log in, go to their profile, and share their
-          Principal ID. Paste it below to assign them a role.
+          Principal ID.
         </p>
         <div className="space-y-1">
           <Label style={{ color: "#0B5A3A" }}>Principal ID</Label>
@@ -528,7 +1426,6 @@ function AdminManagementTab() {
         </Button>
       </div>
 
-      {/* How-to info */}
       <div
         className="rounded-xl p-5"
         style={{
@@ -543,22 +1440,17 @@ function AdminManagementTab() {
           <li>
             1. Ask the person to log into the app using Internet Identity.
           </li>
-          <li>
-            2. Once logged in, their Principal ID appears in the Profile section
-            (or you can add one).
-          </li>
-          <li>3. They copy and share their Principal ID with you.</li>
-          <li>4. Paste it above and assign the Admin role.</li>
+          <li>2. Their Principal ID appears in the header after login.</li>
+          <li>3. They copy and share it with you.</li>
+          <li>4. Paste it above and assign the desired role.</li>
         </ol>
       </div>
 
-      {/* Danger Zone */}
       <div
         className="rounded-xl overflow-hidden"
         style={{ border: "1.5px solid #c62828" }}
         data-ocid="admin.danger_zone.panel"
       >
-        {/* Header */}
         <div
           className="flex items-center gap-2 px-5 py-3"
           style={{ backgroundColor: "#c62828" }}
@@ -568,16 +1460,13 @@ function AdminManagementTab() {
             DANGER ZONE — Reset All Roles
           </h3>
         </div>
-
-        {/* Body */}
         <div className="p-5 space-y-4" style={{ backgroundColor: "#fff5f5" }}>
           <p className="text-xs leading-relaxed" style={{ color: "#7f1d1d" }}>
             ⚠️ This will{" "}
             <strong>permanently remove ALL admin and user roles</strong> from
-            the system. The very next person who logs in will automatically
-            become the new Admin. This action cannot be undone.
+            the system. The very next person who logs in will become the new
+            Admin. This cannot be undone.
           </p>
-
           <div className="space-y-1">
             <Label style={{ color: "#7f1d1d" }}>Reset Token</Label>
             <Input
@@ -588,14 +1477,10 @@ function AdminManagementTab() {
                 setResetToken(e.target.value);
                 setConfirmReset(false);
               }}
-              style={{
-                borderColor: "#fca5a5",
-                backgroundColor: "white",
-              }}
+              style={{ borderColor: "#fca5a5", backgroundColor: "white" }}
               data-ocid="admin.danger_zone.input"
             />
           </div>
-
           {!confirmReset ? (
             <Button
               variant="outline"
@@ -654,6 +1539,110 @@ function AdminManagementTab() {
   );
 }
 
+// ─── Registration Settings Card ──────────────────────────────────────────────
+function RegistrationSettingsCard() {
+  const { actor, isFetching } = useActor();
+  const [upiId, setUpiId] = useState("");
+  const [feeAmount, setFeeAmount] = useState("");
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!actor || isFetching || loaded) return;
+    (actor as any)
+      .getRegistrationSettings()
+      .then((result: any) => {
+        let settings: { upiId: string; feeAmount: bigint } | null = null;
+        if (Array.isArray(result)) {
+          settings =
+            result.length > 0
+              ? (result[0] as { upiId: string; feeAmount: bigint })
+              : null;
+        } else {
+          settings = (result as { upiId: string; feeAmount: bigint }) ?? null;
+        }
+        if (settings) {
+          setUpiId(settings.upiId);
+          setFeeAmount(settings.feeAmount.toString());
+        }
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, [actor, isFetching, loaded]);
+
+  const handleSaveSettings = async () => {
+    if (!actor) return;
+    try {
+      const amount = Number.parseInt(feeAmount) || 0;
+      await (actor as any).setRegistrationSettings(upiId, BigInt(amount));
+      toast.success("Registration settings saved!");
+    } catch {
+      toast.error("Failed to save settings.");
+    }
+  };
+
+  return (
+    <div
+      className="rounded-xl p-5 mb-6"
+      style={{
+        backgroundColor: "#FFFDF0",
+        border: "2px solid #D4AF37",
+      }}
+      data-ocid="admin.reg_settings.card"
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-xl">💳</span>
+        <h3
+          className="font-bold text-base"
+          style={{ color: "#0B5A3A", fontFamily: "'Playfair Display', serif" }}
+        >
+          Registration Payment Settings
+        </h3>
+      </div>
+      <p className="text-xs mb-4" style={{ color: "#1E7A52" }}>
+        Set the UPI ID and fee amount that will be displayed to Masjids during
+        registration.
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-1">
+          <Label style={{ color: "#0B5A3A" }}>
+            UPI ID for Registration Payment
+          </Label>
+          <Input
+            value={upiId}
+            onChange={(e) => setUpiId(e.target.value)}
+            placeholder="example@upi"
+            data-ocid="admin.reg_settings.upi.input"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label style={{ color: "#0B5A3A" }}>
+            Registration Fee Amount (₹)
+          </Label>
+          <Input
+            type="number"
+            min="0"
+            value={feeAmount}
+            onChange={(e) => setFeeAmount(e.target.value)}
+            placeholder="500"
+            data-ocid="admin.reg_settings.fee.input"
+          />
+        </div>
+      </div>
+      <div className="mt-4">
+        <Button
+          onClick={handleSaveSettings}
+          disabled={!upiId.trim() || !feeAmount.trim()}
+          data-ocid="admin.reg_settings.save_button"
+          style={{ backgroundColor: "#0B5A3A", color: "white" }}
+        >
+          Save Settings
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Access Denied Screen ─────────────────────────────────────────────────
 function AccessDeniedScreen({
   actor,
   isAuthenticated,
@@ -663,6 +1652,10 @@ function AccessDeniedScreen({
   isAuthenticated: boolean;
   qc: ReturnType<typeof useQueryClient>;
 }) {
+  const [claimToken, setClaimToken] = useState("");
+  const [tokenVerified, setTokenVerified] = useState(false);
+  const [tokenError, setTokenError] = useState(false);
+
   const { data: adminAssigned, isLoading: checkingAdmin } = useQuery({
     queryKey: ["isAdminAssigned"],
     queryFn: () => actor.isAdminAssigned() as Promise<boolean>,
@@ -685,6 +1678,16 @@ function AccessDeniedScreen({
     },
     onError: () => toast.error("Failed to claim admin role."),
   });
+
+  const handleVerifyToken = () => {
+    if (claimToken.trim() === ADMIN_CLAIM_TOKEN) {
+      setTokenVerified(true);
+      setTokenError(false);
+    } else {
+      setTokenError(true);
+      setTokenVerified(false);
+    }
+  };
 
   if (checkingAdmin) {
     return (
@@ -722,21 +1725,69 @@ function AccessDeniedScreen({
             Claim Admin Role
           </h2>
           <p className="text-sm mb-6" style={{ color: "#1E7A52" }}>
-            No admin has been assigned yet. Click below to claim the admin role
-            for your account.
+            Enter the secret reset token to proceed.
           </p>
-          <Button
-            onClick={() => claimAdminMutation.mutate()}
-            disabled={claimAdminMutation.isPending}
-            data-ocid="admin.claim_admin.primary_button"
-            style={{
-              backgroundColor: "#0B5A3A",
-              color: "white",
-              padding: "0.75rem 2rem",
-            }}
-          >
-            {claimAdminMutation.isPending ? "Claiming..." : "Claim Admin Role"}
-          </Button>
+          {!tokenVerified ? (
+            <div className="space-y-3 text-left">
+              <div className="space-y-1">
+                <Label style={{ color: "#0B5A3A" }}>Secret Token</Label>
+                <Input
+                  type="password"
+                  placeholder="Enter secret token"
+                  value={claimToken}
+                  onChange={(e) => {
+                    setClaimToken(e.target.value);
+                    setTokenError(false);
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && handleVerifyToken()}
+                  data-ocid="admin.claim_admin.token.input"
+                  style={{ borderColor: tokenError ? "#c62828" : undefined }}
+                />
+                {tokenError && (
+                  <p className="text-xs" style={{ color: "#c62828" }}>
+                    Invalid token. Please check and try again.
+                  </p>
+                )}
+              </div>
+              <Button
+                onClick={handleVerifyToken}
+                disabled={!claimToken.trim()}
+                className="w-full"
+                data-ocid="admin.claim_admin.verify_button"
+                style={{ backgroundColor: "#0B5A3A", color: "white" }}
+              >
+                Verify Token
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div
+                className="rounded-lg px-4 py-2 text-sm"
+                style={{
+                  backgroundColor: "#E8F5E9",
+                  color: "#1E7A52",
+                  border: "1px solid rgba(30,122,82,0.3)",
+                }}
+              >
+                ✓ Token verified. You may now claim admin.
+              </div>
+              <Button
+                onClick={() => claimAdminMutation.mutate()}
+                disabled={claimAdminMutation.isPending}
+                className="w-full"
+                data-ocid="admin.claim_admin.primary_button"
+                style={{
+                  backgroundColor: "#0B5A3A",
+                  color: "white",
+                  padding: "0.75rem 2rem",
+                }}
+              >
+                {claimAdminMutation.isPending
+                  ? "Claiming..."
+                  : "Claim Admin Role"}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -767,6 +1818,7 @@ function AccessDeniedScreen({
   );
 }
 
+// ─── Main Admin Page ──────────────────────────────────────────────────────
 export default function AdminPage() {
   const { identity } = useInternetIdentity();
   const { actor, isFetching: actorFetching } = useActor();
@@ -873,13 +1925,45 @@ export default function AdminPage() {
       id,
       profile,
     }: { id: bigint; profile: LocalMasjidProfile }) =>
-      (actor as any).adminUpdateMasjidProfile(id, profile),
+      (actor as any).adminUpdateMasjidProfile(id, profile as any),
     onSuccess: () => {
       toast.success("Masjid updated!");
       qc.invalidateQueries({ queryKey: ["allMasjids"] });
       qc.invalidateQueries({ queryKey: ["pendingMasjids"] });
     },
     onError: () => toast.error("Failed to update Masjid"),
+  });
+
+  const adminDeleteMasjidMutation = useMutation({
+    mutationFn: (id: bigint) =>
+      (actor as any).adminDeleteMasjidRegistration(id),
+    onSuccess: () => {
+      toast.success("Masjid deleted.");
+      qc.invalidateQueries({ queryKey: ["allMasjids"] });
+      qc.invalidateQueries({ queryKey: ["pendingMasjids"] });
+    },
+    onError: () => toast.error("Failed to delete Masjid"),
+  });
+
+  const adminDeleteNikahMutation = useMutation({
+    mutationFn: (id: bigint) => (actor as any).adminDeleteNikahRegistration(id),
+    onSuccess: () => {
+      toast.success("Nikah registration deleted.");
+      qc.invalidateQueries({ queryKey: ["all-regs"] });
+      qc.invalidateQueries({ queryKey: ["pending"] });
+    },
+    onError: () => toast.error("Failed to delete registration"),
+  });
+
+  const adminUpdateNikahMutation = useMutation({
+    mutationFn: ({ id, reg }: { id: bigint; reg: NikahRegistration }) =>
+      (actor as any).adminUpdateNikahRegistration(id, reg),
+    onSuccess: () => {
+      toast.success("Registration updated.");
+      qc.invalidateQueries({ queryKey: ["all-regs"] });
+      qc.invalidateQueries({ queryKey: ["pending"] });
+    },
+    onError: () => toast.error("Failed to update registration"),
   });
 
   if (!isAuthenticated) {
@@ -944,7 +2028,13 @@ export default function AdminPage() {
             Pending ({pending.length})
           </TabsTrigger>
           <TabsTrigger value="all" data-ocid="admin.all.tab">
-            All Registrations
+            All Nikah
+          </TabsTrigger>
+          <TabsTrigger value="matrimony" data-ocid="admin.matrimony.tab">
+            Matrimony
+          </TabsTrigger>
+          <TabsTrigger value="jobs" data-ocid="admin.jobs.tab">
+            Jobs
           </TabsTrigger>
           <TabsTrigger value="masjids" data-ocid="admin.masjids.tab">
             Masjid Applications ({pendingMasjids.length})
@@ -963,6 +2053,7 @@ export default function AdminPage() {
           </TabsTrigger>
         </TabsList>
 
+        {/* Pending Nikah */}
         <TabsContent value="pending" data-ocid="admin.pending.panel">
           {pending.length === 0 ? (
             <p
@@ -1026,38 +2117,21 @@ export default function AdminPage() {
           )}
         </TabsContent>
 
+        {/* All Nikah Registrations — with edit/delete */}
         <TabsContent value="all" data-ocid="admin.all.panel">
           <div className="space-y-3">
-            {all.map((reg, i) => (
-              <div
+            {all.map((reg) => (
+              <NikahEditRow
                 key={reg.id.toString()}
-                data-ocid={`admin.all.item.${i + 1}`}
-                className="flex items-center justify-between rounded-xl px-5 py-3"
-                style={{
-                  backgroundColor: "#FAF7E6",
-                  border: "1px solid rgba(212,175,55,0.3)",
-                }}
-              >
-                <div>
-                  <p
-                    className="font-medium text-sm"
-                    style={{ color: "#0B5A3A" }}
-                  >
-                    #{reg.id.toString()} — {reg.brideName} &amp; {reg.groomName}
-                  </p>
-                  <p className="text-xs" style={{ color: "#1E7A52" }}>
-                    {reg.city} • {reg.nikahDate}
-                  </p>
-                </div>
-                <Badge
-                  style={{
-                    backgroundColor: statusColor(reg.status),
-                    color: "white",
-                  }}
-                >
-                  {reg.status}
-                </Badge>
-              </div>
+                reg={reg}
+                onSave={(updated) =>
+                  adminUpdateNikahMutation.mutate({
+                    id: updated.id,
+                    reg: updated,
+                  })
+                }
+                onDelete={(id) => adminDeleteNikahMutation.mutate(id)}
+              />
             ))}
             {all.length === 0 && (
               <p style={{ color: "#1E7A52" }} data-ocid="admin.all.empty_state">
@@ -1067,7 +2141,25 @@ export default function AdminPage() {
           </div>
         </TabsContent>
 
+        {/* Matrimony */}
+        <TabsContent value="matrimony" data-ocid="admin.matrimony.panel">
+          <h3 className="font-semibold mb-4" style={{ color: "#0B5A3A" }}>
+            💍 All Matrimony Proposals
+          </h3>
+          <MatrimonyAdminTab />
+        </TabsContent>
+
+        {/* Jobs */}
+        <TabsContent value="jobs" data-ocid="admin.jobs.panel">
+          <h3 className="font-semibold mb-4" style={{ color: "#0B5A3A" }}>
+            💼 All Job Postings
+          </h3>
+          <JobsAdminTab />
+        </TabsContent>
+
+        {/* Masjid Applications */}
         <TabsContent value="masjids" data-ocid="admin.masjids.panel">
+          <RegistrationSettingsCard />
           <h3 className="font-semibold mb-3" style={{ color: "#0B5A3A" }}>
             Pending Applications
           </h3>
@@ -1109,6 +2201,43 @@ export default function AdminPage() {
                         <p className="text-xs" style={{ color: "#1E7A52" }}>
                           UPI: {m.upiId}
                         </p>
+                      )}
+                      {m.utrNumber && (
+                        <p
+                          className="text-xs font-medium"
+                          style={{ color: "#0B5A3A" }}
+                        >
+                          UTR: {m.utrNumber}
+                        </p>
+                      )}
+                      {m.masjidRegistrationId && (
+                        <p
+                          className="text-xs font-medium"
+                          style={{ color: "#0B5A3A" }}
+                        >
+                          Reg ID: {m.masjidRegistrationId}
+                        </p>
+                      )}
+                      {(m.presidentName ||
+                        m.secretaryName ||
+                        m.treasurerName) && (
+                        <div className="mt-1 text-xs" style={{ color: "#555" }}>
+                          {m.presidentName && (
+                            <span>
+                              Pres: {m.presidentName} ({m.presidentPhone}) |{" "}
+                            </span>
+                          )}
+                          {m.secretaryName && (
+                            <span>
+                              Sec: {m.secretaryName} ({m.secretaryPhone}) |{" "}
+                            </span>
+                          )}
+                          {m.treasurerName && (
+                            <span>
+                              Treas: {m.treasurerName} ({m.treasurerPhone})
+                            </span>
+                          )}
+                        </div>
                       )}
                       {m.facilities.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
@@ -1170,6 +2299,7 @@ export default function AdminPage() {
                 onSave={(id, profile) =>
                   adminUpdateMasjidMutation.mutate({ id, profile })
                 }
+                onDelete={(id) => adminDeleteMasjidMutation.mutate(id)}
               />
             ))}
             {allMasjids.length === 0 && (
@@ -1178,6 +2308,7 @@ export default function AdminPage() {
           </div>
         </TabsContent>
 
+        {/* Zakat Profiles */}
         <TabsContent
           value="zakat_profiles"
           data-ocid="admin.zakat_profiles.panel"
@@ -1188,6 +2319,7 @@ export default function AdminPage() {
           <ZakatProfilesAdminTab />
         </TabsContent>
 
+        {/* Zakat Settings */}
         <TabsContent value="zakat" data-ocid="admin.zakat.panel">
           <div
             className="max-w-md rounded-xl p-6"
@@ -1284,6 +2416,8 @@ export default function AdminPage() {
             </div>
           </div>
         </TabsContent>
+
+        {/* Admin Management */}
         <TabsContent value="admin_mgmt" data-ocid="admin.admin_mgmt.panel">
           <AdminManagementTab />
         </TabsContent>
