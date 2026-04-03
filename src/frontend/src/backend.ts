@@ -93,6 +93,10 @@ export interface DonationInfo {
     upiId: string;
     qrCodeUrl: string;
 }
+export interface RegistrationSettings {
+    upiId: string;
+    feeAmount: bigint;
+}
 export interface ZakatSettings {
     nisabGoldGrams: number;
     silverRatePerGram: number;
@@ -229,6 +233,30 @@ export interface backendInterface {
     submitNikahRegistration(registration: NikahRegistration): Promise<bigint>;
     updateDonationInfo(info: DonationInfo): Promise<void>;
     updateZakatSettings(settings: ZakatSettings): Promise<void>;
+    getRegistrationSettings(): Promise<RegistrationSettings | null>;
+    setRegistrationSettings(upiId: string, feeAmount: bigint): Promise<void>;
+    claimAdminIfUnassigned(): Promise<boolean>;
+    isAdminAssigned(): Promise<boolean>;
+    resetAllRolesWithToken(token: string): Promise<void>;
+    adminDeleteMasjidRegistration(id: bigint): Promise<void>;
+    adminDeleteNikahRegistration(id: bigint): Promise<void>;
+    adminUpdateNikahRegistration(id: bigint, registration: NikahRegistration): Promise<void>;
+    adminDeleteMatrimonyProposal(id: bigint): Promise<void>;
+    adminUpdateMatrimonyProposal(id: bigint, proposal: MatrimonyProposal): Promise<void>;
+    adminDeleteJobPosting(id: bigint): Promise<void>;
+    adminUpdateJobPosting(id: bigint, job: JobPosting): Promise<void>;
+    adminUpdateMasjidProfile(id: bigint, profile: MasjidProfile): Promise<void>;
+    getCallerNikahRegistrations(): Promise<Array<NikahRegistration>>;
+    getCallerMatrimonyProposals(): Promise<Array<MatrimonyProposal>>;
+    getCallerJobPostings(): Promise<Array<JobPosting>>;
+    getAllZakatProfiles(): Promise<Array<ZakatProfile>>;
+    createZakatProfile(profile: ZakatProfile): Promise<bigint>;
+    updateZakatProfile(id: bigint, profile: ZakatProfile): Promise<void>;
+    deleteZakatProfile(id: bigint): Promise<void>;
+    markZakatProfileFulfilled(id: bigint): Promise<void>;
+    updateZakatCollectedAmount(id: bigint, amount: number): Promise<void>;
+    getZakatProfilesByMasjid(masjidId: bigint): Promise<Array<ZakatProfile>>;
+    getOpenZakatProfiles(): Promise<Array<ZakatProfile>>;
 }
 import type { Certificate as _Certificate, DonationInfo as _DonationInfo, Gender as _Gender, MasjidProfile as _MasjidProfile, MasjidStatus as _MasjidStatus, MatrimonyProposal as _MatrimonyProposal, NikahRegistration as _NikahRegistration, NikahStatus as _NikahStatus, UserProfile as _UserProfile, UserRole as _UserRole, ZakatSettings as _ZakatSettings } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -722,6 +750,14 @@ export class Backend implements backendInterface {
     }
     async claimAdminIfUnassigned(): Promise<boolean> {
         const result = await this.actor.claimAdminIfUnassigned();
+        return result;
+    }
+    async getRegistrationSettings(): Promise<RegistrationSettings | null> {
+        const result = await (this.actor as any).getRegistrationSettings();
+        return result.length === 0 ? null : result[0];
+    }
+    async setRegistrationSettings(arg0: string, arg1: bigint): Promise<void> {
+        const result = await (this.actor as any).setRegistrationSettings(arg0, arg1);
         return result;
     }
     async resetAllRolesWithToken(arg0: string): Promise<void> {

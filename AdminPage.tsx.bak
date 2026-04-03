@@ -1545,16 +1545,12 @@ function RegistrationSettingsCard() {
   const [upiId, setUpiId] = useState("");
   const [feeAmount, setFeeAmount] = useState("");
   const [loaded, setLoaded] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">(
-    "idle",
-  );
 
   useEffect(() => {
     if (!actor || isFetching || loaded) return;
-    actor
+    (actor as any)
       .getRegistrationSettings()
-      .then((result) => {
+      .then((result: any) => {
         let settings: { upiId: string; feeAmount: bigint } | null = null;
         if (Array.isArray(result)) {
           settings =
@@ -1575,20 +1571,12 @@ function RegistrationSettingsCard() {
 
   const handleSaveSettings = async () => {
     if (!actor) return;
-    setSaving(true);
-    setSaveStatus("idle");
     try {
       const amount = Number.parseInt(feeAmount) || 0;
-      await actor.setRegistrationSettings(upiId, BigInt(amount));
-      setSaveStatus("success");
+      await (actor as any).setRegistrationSettings(upiId, BigInt(amount));
       toast.success("Registration settings saved!");
-      setTimeout(() => setSaveStatus("idle"), 4000);
     } catch {
-      setSaveStatus("error");
       toast.error("Failed to save settings.");
-      setTimeout(() => setSaveStatus("idle"), 4000);
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -1640,25 +1628,15 @@ function RegistrationSettingsCard() {
           />
         </div>
       </div>
-      <div className="mt-4 flex items-center gap-3 flex-wrap">
+      <div className="mt-4">
         <Button
           onClick={handleSaveSettings}
-          disabled={!upiId.trim() || !feeAmount.trim() || saving}
+          disabled={!upiId.trim() || !feeAmount.trim()}
           data-ocid="admin.reg_settings.save_button"
           style={{ backgroundColor: "#0B5A3A", color: "white" }}
         >
-          {saving ? "Saving..." : "Save Settings"}
+          Save Settings
         </Button>
-        {saveStatus === "success" && (
-          <span className="text-sm font-medium" style={{ color: "#0B5A3A" }}>
-            ✅ Settings saved successfully!
-          </span>
-        )}
-        {saveStatus === "error" && (
-          <span className="text-sm font-medium" style={{ color: "#c0392b" }}>
-            ❌ Failed to save. Please try again.
-          </span>
-        )}
       </div>
     </div>
   );
