@@ -26,9 +26,8 @@ export function useActor() {
       };
 
       const actor = await createActorWithConfig(actorOptions);
-      // Fire and forget — do NOT await this call.
-      // If it blocks or fails, the actor is still returned immediately.
       const adminToken = getSecretParameter("caffeineAdminToken") || "";
+      // Fire and forget — do NOT await. If this fails the actor is still usable.
       actor._initializeAccessControlWithSecret(adminToken).catch(() => {});
       return actor;
     },

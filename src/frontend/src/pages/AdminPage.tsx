@@ -1681,7 +1681,8 @@ function AccessDeniedScreen({
   const { data: adminAssigned, isLoading: checkingAdmin } = useQuery({
     queryKey: ["isAdminAssigned"],
     queryFn: () => actor.isAdminAssigned() as Promise<boolean>,
-    enabled: !!actor && isAuthenticated,
+    enabled: !!actor,
+    retry: false,
   });
 
   const claimAdminMutation = useMutation({
@@ -1711,7 +1712,7 @@ function AccessDeniedScreen({
     }
   };
 
-  if (checkingAdmin) {
+  if (checkingAdmin && isAuthenticated) {
     return (
       <div
         className="max-w-xl mx-auto px-4 py-12 text-center"
@@ -1855,8 +1856,9 @@ export default function AdminPage() {
 
   const { data: isAdmin, isLoading: adminLoading } = useQuery({
     queryKey: ["isAdmin"],
-    queryFn: () => actor!.isCallerAdmin(),
+    queryFn: () => actor!.isCallerAdmin().catch(() => false),
     enabled: !!actor && isAuthenticated,
+    retry: false,
   });
 
   const { data: pending = [] } = useQuery<NikahRegistration[]>({
