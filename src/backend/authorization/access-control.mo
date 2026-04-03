@@ -1,6 +1,5 @@
 import Map "mo:core/Map";
 import Principal "mo:core/Principal";
-import Runtime "mo:core/Runtime";
 
 module {
   public type UserRole = {
@@ -47,7 +46,8 @@ module {
 
   public func assignRole(state : AccessControlState, caller : Principal, user : Principal, role : UserRole) {
     if (not (isAdmin(state, caller))) {
-      Runtime.trap("Unauthorized: Only admins can assign user roles");
+      // Returns silently for non-admins instead of trapping
+      return;
     };
     state.userRoles.add(user, role);
   };
