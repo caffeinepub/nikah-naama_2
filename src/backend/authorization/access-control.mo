@@ -37,7 +37,6 @@ module {
     };
   };
 
-  // Returns #guest for unknown/anonymous users instead of trapping.
   public func getUserRole(state : AccessControlState, caller : Principal) : UserRole {
     if (caller.isAnonymous()) { return #guest };
     switch (state.userRoles.get(caller)) {

@@ -27,8 +27,7 @@ export function useActor() {
 
       const actor = await createActorWithConfig(actorOptions);
       const adminToken = getSecretParameter("caffeineAdminToken") || "";
-      // Fire and forget — do NOT await. If this fails the actor is still usable.
-      actor._initializeAccessControlWithSecret(adminToken).catch(() => {});
+      await actor._initializeAccessControlWithSecret(adminToken);
       return actor;
     },
     // Only refetch when identity changes
