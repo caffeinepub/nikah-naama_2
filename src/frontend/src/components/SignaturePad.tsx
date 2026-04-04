@@ -9,10 +9,15 @@ import {
 export interface SignaturePadHandle {
   getSignatureDataUrl(): string | null;
   clear(): void;
+  restoreFromDataUrl(dataUrl: string): void;
 }
 
 interface SignaturePadProps {
   label?: string;
+  /** If provided, this value is restored into the canvas on mount and kept in sync */
+  value?: string | null;
+  /** Called whenever the user finishes a stroke or clears */
+  onChange?: (dataUrl: string | null) => void;
 }
 
 interface DrawPoint {
@@ -21,20 +26,34 @@ interface DrawPoint {
 }
 
 const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
-  function SignaturePad({ label }, ref) {
+  function SignaturePad({ label, value, onChange }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [isEmpty, setIsEmpty] = useState(true);
+    const [isEmpty, setIsEmpty] = useState(!value);
     const isDrawing = useRef(false);
     const lastPos = useRef<{ x: number; y: number } | null>(null);
 
+    // On mount or when `value` changes externally, restore the image into the canvas
     useEffect(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }, []);
+
+      if (value) {
+        const img = new Image();
+        img.onload = () => {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          setIsEmpty(false);
+        };
+        img.src = value;
+      } else {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        setIsEmpty(true);
+      }
+    }, [value]);
 
     useImperativeHandle(ref, () => ({
       getSignatureDataUrl(): string | null {
@@ -49,6 +68,21 @@ const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         setIsEmpty(true);
+        onChange?.(null);
+      },
+      restoreFromDataUrl(dataUrl: string) {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        const img = new Image();
+        img.onload = () => {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          setIsEmpty(false);
+        };
+        img.src = dataUrl;
       },
     }));
 
@@ -86,10 +120,17 @@ const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
     };
 
     const stopDraw = () => {
+      if (!isDrawing.current) return;
       isDrawing.current = false;
       lastPos.current = null;
+      // Persist signature to parent state after each stroke
+      const canvas = canvasRef.current;
+      if (canvas && !isEmpty) {
+        onChange?.(canvas.toDataURL("image/png"));
+      }
     };
 
+    // Also fire onChange when mouse/touch lifts off canvas
     const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -130,6 +171,7 @@ const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       setIsEmpty(true);
+      onChange?.(null);
     };
 
     return (

@@ -26,8 +26,8 @@ export function useActor() {
       };
 
       const actor = await createActorWithConfig(actorOptions);
+      // Fire-and-forget: do NOT await this — it must never block the actor from being returned
       const adminToken = getSecretParameter("caffeineAdminToken") || "";
-      // Fire-and-forget: do NOT await — this must never block actor resolution
       actor._initializeAccessControlWithSecret(adminToken).catch(() => {});
       return actor;
     },

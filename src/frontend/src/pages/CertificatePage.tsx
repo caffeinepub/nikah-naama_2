@@ -5,33 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { Printer } from "lucide-react";
 
-// Extended type for new fields returned by updated backend
-interface ExtendedNikah extends NikahRegistration {
-  nikahUniqueId?: string;
-  groomFatherName?: string;
-  groomAddress?: string;
-  groomPhone?: string;
-  groomPhotoUrl?: string;
-  groomSignature?: string;
-  brideFatherName?: string;
-  brideAddress?: string;
-  bridePhone?: string;
-  bridePhotoUrl?: string;
-  brideSignature?: string;
-  qaziContact?: string;
-  qaziSignature?: string;
-  witness1Contact?: string;
-  witness1Signature?: string;
-  witness2Contact?: string;
-  witness2Signature?: string;
-  masjidSignature?: string;
-  maher?: string;
-}
-
-interface ExtendedCertificate extends Certificate {
-  nikah: ExtendedNikah;
-}
-
 // Always-show signature block — empty bordered box when no dataUrl
 function SigBlock({ label, dataUrl }: { label: string; dataUrl?: string }) {
   return (
@@ -150,15 +123,13 @@ export default function CertificatePage() {
     data: cert,
     isLoading,
     isError,
-  } = useQuery<ExtendedCertificate | null>({
+  } = useQuery<Certificate | null>({
     queryKey: ["certificate", id],
     queryFn: async () => {
       if (!id || !actor) return null;
       const reg = await actor.getNikahRegistration(BigInt(id));
       if (!reg || reg.status !== NikahStatus.approved) return null;
-      return actor.generateCertificate(
-        BigInt(id),
-      ) as Promise<ExtendedCertificate>;
+      return actor.generateCertificate(BigInt(id)) as Promise<Certificate>;
     },
     enabled: !!id && !!actor,
   });

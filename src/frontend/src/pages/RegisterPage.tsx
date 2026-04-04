@@ -48,6 +48,16 @@ interface WitnessDetails {
   contact: string;
 }
 
+// Signatures stored as base64 strings in state so they survive section collapse/unmount
+interface SignatureState {
+  groom: string | null;
+  bride: string | null;
+  qazi: string | null;
+  witness1: string | null;
+  witness2: string | null;
+  masjid: string | null;
+}
+
 interface FormState {
   groom: PersonDetails;
   bride: PersonDetails;
@@ -75,6 +85,15 @@ const initialForm: FormState = {
   witness2: { name: "", contact: "" },
   maher: "",
   termsAccepted: false,
+};
+
+const initialSignatures: SignatureState = {
+  groom: null,
+  bride: null,
+  qazi: null,
+  witness1: null,
+  witness2: null,
+  masjid: null,
 };
 
 // --- Section Component ---
@@ -246,11 +265,15 @@ function PersonForm({
   onChange,
   prefix,
   sigRef,
+  sigValue,
+  onSigChange,
 }: {
   data: PersonDetails;
   onChange: (updated: PersonDetails) => void;
   prefix: string;
   sigRef: React.RefObject<SignaturePadHandle | null>;
+  sigValue: string | null;
+  onSigChange: (dataUrl: string | null) => void;
 }) {
   const set =
     (field: keyof PersonDetails) =>
@@ -320,7 +343,12 @@ function PersonForm({
         </Field>
       </FieldGroup>
       <div className="mt-2">
-        <SignaturePad ref={sigRef} label="Digital Signature *" />
+        <SignaturePad
+          ref={sigRef}
+          label="Digital Signature *"
+          value={sigValue}
+          onChange={onSigChange}
+        />
       </div>
     </div>
   );
@@ -334,6 +362,9 @@ export default function RegisterPage() {
   const isAuthenticated = !!identity && !identity.getPrincipal().isAnonymous();
 
   const [form, setForm] = useState<FormState>(initialForm);
+  // Persist all signatures as state so they survive section collapse/unmount
+  const [signatures, setSignatures] =
+    useState<SignatureState>(initialSignatures);
   const [loading, setLoading] = useState(false);
   const [openSection, setOpenSection] = useState<string>("groom");
   const [successData, setSuccessData] = useState<{
@@ -341,13 +372,16 @@ export default function RegisterPage() {
     nikahUniqueId: string;
   } | null>(null);
 
-  // Signature refs
+  // Refs are still used so we can call getSignatureDataUrl() at submit time for the currently-open section
   const groomSigRef = useRef<SignaturePadHandle>(null);
   const brideSigRef = useRef<SignaturePadHandle>(null);
   const qaziSigRef = useRef<SignaturePadHandle>(null);
   const witness1SigRef = useRef<SignaturePadHandle>(null);
   const witness2SigRef = useRef<SignaturePadHandle>(null);
   const masjidSigRef = useRef<SignaturePadHandle>(null);
+
+  const setSig = (key: keyof SignatureState) => (dataUrl: string | null) =>
+    setSignatures((prev) => ({ ...prev, [key]: dataUrl }));
 
   const toggleSection = (id: string) =>
     setOpenSection((prev) => (prev === id ? "" : id));
@@ -380,37 +414,48 @@ export default function RegisterPage() {
       return;
     }
 
-    const groomSig = groomSigRef.current?.getSignatureDataUrl();
-    const brideSig = brideSigRef.current?.getSignatureDataUrl();
-    const qaziSig = qaziSigRef.current?.getSignatureDataUrl();
-    const witness1Sig = witness1SigRef.current?.getSignatureDataUrl();
-    const witness2Sig = witness2SigRef.current?.getSignatureDataUrl();
-    const masjidSig = masjidSigRef.current?.getSignatureDataUrl();
+    // Read signatures: for the currently-open section use the live ref,
+    // for all others use the persisted state value.
+    const getOrState = (
+      key: keyof SignatureState,
+      ref: React.RefObject<SignaturePadHandle | null>,
+    ) => ref.current?.getSignatureDataUrl() ?? signatures[key];
+
+    const groomSig = getOrState("groom", groomSigRef);
+    const brideSig = getOrState("bride", brideSigRef);
+    const qaziSig = getOrState("qazi", qaziSigRef);
+    const witness1Sig = getOrState("witness1", witness1SigRef);
+    const witness2Sig = getOrState("witness2", witness2SigRef);
+    const masjidSig = getOrState("masjid", masjidSigRef);
 
     if (!groomSig) {
       toast.error("Groom signature is required");
+      setOpenSection("groom");
       return;
     }
     if (!brideSig) {
       toast.error("Bride signature is required");
+      setOpenSection("bride");
       return;
     }
     if (!qaziSig) {
       toast.error("Imam/Qazi signature is required");
+      setOpenSection("ceremony");
       return;
     }
     if (!witness1Sig) {
       toast.error("Witness 1 signature is required");
+      setOpenSection("witness1");
       return;
     }
     if (!witness2Sig) {
       toast.error("Witness 2 signature is required");
+      setOpenSection("witness2");
       return;
     }
 
     setLoading(true);
     try {
-      // Use 'as any' to submit extended fields — backend supports these in the new version
       const registration: any = {
         id: 0n,
         nikahUniqueId: "",
@@ -458,6 +503,7 @@ export default function RegisterPage() {
       const nikahUniqueId = `NIKAH-${new Date().getFullYear()}-${String(Number(id)).padStart(4, "0")}`;
       setSuccessData({ id, nikahUniqueId });
       setForm(initialForm);
+      setSignatures(initialSignatures);
       toast.success("Nikah registered successfully!");
     } catch {
       toast.error("Submission failed. Please try again.");
@@ -608,7 +654,10 @@ export default function RegisterPage() {
           isOpen={openSection === "groom"}
           onToggle={() => toggleSection("groom")}
           isComplete={
-            !!form.groom.name && !!form.groom.fatherName && !!form.groom.aadhaar
+            !!form.groom.name &&
+            !!form.groom.fatherName &&
+            !!form.groom.aadhaar &&
+            !!signatures.groom
           }
         >
           <PersonForm
@@ -616,6 +665,8 @@ export default function RegisterPage() {
             onChange={setGroom}
             prefix="groom"
             sigRef={groomSigRef}
+            sigValue={signatures.groom}
+            onSigChange={setSig("groom")}
           />
         </Section>
 
@@ -627,7 +678,10 @@ export default function RegisterPage() {
           isOpen={openSection === "bride"}
           onToggle={() => toggleSection("bride")}
           isComplete={
-            !!form.bride.name && !!form.bride.fatherName && !!form.bride.aadhaar
+            !!form.bride.name &&
+            !!form.bride.fatherName &&
+            !!form.bride.aadhaar &&
+            !!signatures.bride
           }
         >
           <PersonForm
@@ -635,6 +689,8 @@ export default function RegisterPage() {
             onChange={setBride}
             prefix="bride"
             sigRef={brideSigRef}
+            sigValue={signatures.bride}
+            onSigChange={setSig("bride")}
           />
         </Section>
 
@@ -645,7 +701,11 @@ export default function RegisterPage() {
           icon={<Building2 size={18} />}
           isOpen={openSection === "ceremony"}
           onToggle={() => toggleSection("ceremony")}
-          isComplete={!!form.ceremony.date && !!form.ceremony.qaziName}
+          isComplete={
+            !!form.ceremony.date &&
+            !!form.ceremony.qaziName &&
+            !!signatures.qazi
+          }
         >
           <div className="space-y-4">
             <FieldGroup>
@@ -728,6 +788,8 @@ export default function RegisterPage() {
               <SignaturePad
                 ref={qaziSigRef}
                 label="Imam / Qazi Digital Signature *"
+                value={signatures.qazi}
+                onChange={setSig("qazi")}
               />
             </div>
           </div>
@@ -740,7 +802,7 @@ export default function RegisterPage() {
           icon={<Users size={18} />}
           isOpen={openSection === "witness1"}
           onToggle={() => toggleSection("witness1")}
-          isComplete={!!form.witness1.name}
+          isComplete={!!form.witness1.name && !!signatures.witness1}
         >
           <div className="space-y-4">
             <FieldGroup>
@@ -777,6 +839,8 @@ export default function RegisterPage() {
             <SignaturePad
               ref={witness1SigRef}
               label="Witness 1 Digital Signature *"
+              value={signatures.witness1}
+              onChange={setSig("witness1")}
             />
           </div>
         </Section>
@@ -788,7 +852,7 @@ export default function RegisterPage() {
           icon={<Users size={18} />}
           isOpen={openSection === "witness2"}
           onToggle={() => toggleSection("witness2")}
-          isComplete={!!form.witness2.name}
+          isComplete={!!form.witness2.name && !!signatures.witness2}
         >
           <div className="space-y-4">
             <FieldGroup>
@@ -825,6 +889,8 @@ export default function RegisterPage() {
             <SignaturePad
               ref={witness2SigRef}
               label="Witness 2 Digital Signature *"
+              value={signatures.witness2}
+              onChange={setSig("witness2")}
             />
           </div>
         </Section>
@@ -845,6 +911,8 @@ export default function RegisterPage() {
             <SignaturePad
               ref={masjidSigRef}
               label="Masjid Authority Signature"
+              value={signatures.masjid}
+              onChange={setSig("masjid")}
             />
           </div>
         </Section>
