@@ -26,8 +26,10 @@ export function useActor() {
       };
 
       const actor = await createActorWithConfig(actorOptions);
-      // Fire-and-forget: do NOT await this — it must never block the actor from being returned
       const adminToken = getSecretParameter("caffeineAdminToken") || "";
+      // Fire-and-forget: register the user role without blocking actor creation.
+      // The backend now safely returns #user for unregistered principals, so
+      // any call made before this resolves will still succeed.
       actor._initializeAccessControlWithSecret(adminToken).catch(() => {});
       return actor;
     },

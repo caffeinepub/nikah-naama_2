@@ -42,7 +42,10 @@ module {
     switch (state.userRoles.get(caller)) {
       case (?role) { role };
       case (null) {
-        Runtime.trap("User is not registered");
+        // Unknown authenticated principal: treat as #user (not guest, not admin).
+        // This prevents Runtime.trap from killing valid backend calls when a
+        // principal hasn't been registered yet (e.g. race condition on first login).
+        #user;
       };
     };
   };
